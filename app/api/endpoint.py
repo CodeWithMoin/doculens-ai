@@ -368,9 +368,19 @@ def list_documents(
         task_context = row.get("task_context") or {}
         metadata = task_context.get("metadata") or {}
         document_meta = metadata.get("document") or {}
+        upload_meta = document_meta.get("metadata") or {}
 
         document_id = document_meta.get("id") or str(row.get("id"))
-        filename = document_meta.get("original_filename") or document_meta.get("filename")
+        filename = (
+            upload_meta.get("uploaded_filename")
+            or document_meta.get("original_filename")
+            or document_meta.get("filename")
+        )
+        if filename and "_" in filename and upload_meta.get("uploaded_filename") is None:
+            # Legacy events stored filenames prefixed with random tokens; strip them for display.
+            stripped = filename.partition("_")[2]
+            if stripped:
+                filename = stripped
 
         summary_payload = summary_by_doc.get(document_id)
         if not summary_payload and filename:

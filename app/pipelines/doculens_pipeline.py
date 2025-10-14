@@ -155,8 +155,8 @@ class ExtractionNode(Node):
         document_id = task_context.metadata.get("document", {}).get("id", uuid4().hex)
 
         ingestion_dir = _ensure_ingestion_dir()
-        filename = Path(event.filename or f"{document_id}.bin").name
-        local_path = ingestion_dir / f"{document_id}_{filename}"
+        source_name = Path(event.filename or f"{document_id}.bin").name
+        local_path = ingestion_dir / f"{document_id}_{source_name}"
 
         if event.file_url:
             logger.info("Downloading document for ingestion: %s", event.file_url)
@@ -171,6 +171,12 @@ class ExtractionNode(Node):
                 )
             local_path = source_path.resolve()
 
+        upload_metadata = event.metadata or {}
+        original_filename = upload_metadata.get("uploaded_filename") or upload_metadata.get("original_filename")
+        if not original_filename:
+            # Fall back to stripping any UUID prefix we added during upload.
+            original_filename = source_name.partition("_")[2] or source_name
+
         docling_doc = extract_docling_document(str(local_path))
         if docling_doc is None:
             raise ValueError("Docling conversion failed to produce a document.")
@@ -181,7 +187,8 @@ class ExtractionNode(Node):
         task_context.state["local_path"] = str(local_path)
         task_context.metadata["document"] = {
             "id": document_id,
-            "original_filename": filename,
+            "original_filename": original_filename,
+            "stored_filename": Path(local_path).name,
             "source_url": event.file_url,
             "local_path": str(local_path),
             "ingest_source": event.filename,
