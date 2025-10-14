@@ -1,0 +1,6 @@
+{
+  "event_type": "document_summary",
+  "filename": "/app/data/ingestion/Moinuddin_Shaik_Resume_2025.pdf",
+  "doc_type": "resume",
+  "chunks_limit": 8
+}

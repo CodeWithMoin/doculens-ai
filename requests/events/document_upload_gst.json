@@ -1,0 +1,10 @@
+{
+  "event_type": "document_upload",
+  "filename": "/app/data/ingestion/Registration Certificate GSTIN.pdf",
+  "file_url": "",
+  "doc_type": "legal",
+  "metadata": {
+    "uploaded_by": "user@example.com",
+    "upload_time": "2025-10-09T07:05:00Z"
+  }
+}

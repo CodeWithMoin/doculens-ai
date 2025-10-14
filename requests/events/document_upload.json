@@ -1,0 +1,10 @@
+{
+  "event_type": "document_upload",
+  "filename": "dummy_invoice.pdf",
+  "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+  "doc_type": null,
+  "metadata": {
+    "uploaded_by": "user@example.com",
+    "upload_time": "2024-06-01T12:00:00Z"
+  }
+} 

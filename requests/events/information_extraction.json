@@ -1,0 +1,7 @@
+{
+  "event_type": "information_extraction",
+  "document_id": "invoice_local_001",
+  "doc_type": "invoice",
+  "text": "123100401, Customer No = 12345. 123100401, Invoice Period = 01.02.2024 - 29.02.2024. 123100401, Date = 1. März 2024 Basic Fee wmView, Amount -without VAT- = 130,00 €. Basic Fee wmView, quantity = 1. Basic Fee wmView, Total Amount = 130,00 €. Basis fee for additional user accounts, Amount -without VAT- = 10,00 €. Basis fee for additional user accounts, quantity = 0. Basis fee for additional user accounts, Total Amount = 0,00 €.",
+  "fields": ["total_amount", "invoice_date", "client_name"]
+}

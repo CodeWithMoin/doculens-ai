@@ -1,0 +1,10 @@
+{
+  "event_type": "document_upload",
+  "filename": "/app/data/ingestion/Moinuddin_Shaik_Resume_2025.pdf",
+  "file_url": "",
+  "doc_type": "resume",
+  "metadata": {
+    "uploaded_by": "user@example.com",
+    "upload_time": "2025-10-09T07:00:00Z"
+  }
+}

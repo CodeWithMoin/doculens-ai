@@ -1,0 +1,10 @@
+{
+  "event_type": "document_upload",
+  "filename": "/app/data/ingestion/sample-invoice.pdf",
+  "file_url": "",
+  "doc_type": "invoice",
+  "metadata": {
+    "uploaded_by": "user@example.com",
+    "upload_time": "2025-10-08T18:40:00Z"
+  }
+}

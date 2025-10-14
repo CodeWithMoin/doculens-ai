@@ -1,0 +1,34 @@
+FROM python:3.12.8-slim-bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r celery && useradd -r -g celery -d /home/celery -m celery
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV HOME=/home/celery
+ENV EASYOCR_HOME=${HOME}/.EasyOCR
+ENV DOCLING_CACHE_DIR=${HOME}/.cache/docling
+
+RUN mkdir -p "${EASYOCR_HOME}" "${DOCLING_CACHE_DIR}" \
+    && chown -R celery:celery /home/celery
+
+WORKDIR /app
+
+ADD app/requirements.txt .
+
+RUN pip install -r requirements.txt watchdog
+
+ADD app/ /app
+
+RUN chown -R celery:celery /app
+
+USER celery
+
+CMD ["sh", "-c", "watchmedo auto-restart --directory=./ --pattern='*.py' --recursive -- celery -A config.celery_config worker --loglevel=info --concurrency=1"]

@@ -1,0 +1,6 @@
+{
+  "event_type": "qa_query",
+  "query": "What address is listed on the GST registration certificate and who is the proprietor?",
+  "top_k": 5,
+  "filters": {}
+}

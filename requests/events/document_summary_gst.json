@@ -1,0 +1,6 @@
+{
+  "event_type": "document_summary",
+  "filename": "/app/data/ingestion/Registration Certificate GSTIN.pdf",
+  "doc_type": "legal",
+  "chunks_limit": 8
+}

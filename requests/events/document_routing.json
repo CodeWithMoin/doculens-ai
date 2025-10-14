@@ -1,0 +1,6 @@
+{
+  "event_type": "document_routing",
+  "document_id": "invoice_local_001",
+  "target_department": "Finance Payables",
+  "reason": "Header and address block show an invoice from CPB Software (Germany) GmbH for customer 12345 in March 2024."
+} 
