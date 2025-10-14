@@ -12,6 +12,11 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("OPENAI_API_KEY", "ci-test-key")
 os.environ.setdefault("ANTHROPIC_API_KEY", "ci-test-key")
 os.environ.setdefault("OPEN_ROUTER_API_KEY", "ci-test-key")
+os.environ.setdefault("DATABASE_HOST", "localhost")
+os.environ.setdefault("DATABASE_PORT", "5432")
+os.environ.setdefault("DATABASE_NAME", "doculens")
+os.environ.setdefault("DATABASE_USER", "postgres")
+os.environ.setdefault("DATABASE_PASSWORD", "ci-password")
 
 from config.settings import get_settings
 
