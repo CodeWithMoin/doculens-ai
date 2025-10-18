@@ -26,6 +26,9 @@ from app.doc_utils.embedding import embed_and_upsert_chunks
 from app.doc_utils.extraction import extract_docling_document
 from app.doc_utils.search import semantic_search_docling
 from app.services.llm_factory import LLMFactory
+from app.services.classification_service import ClassificationResult, ClassificationScore
+from app.services.classification_audit import record_classification_result
+from app.database.session import SessionLocal
 from app.services.prompt_loader import PromptManager
 from app.services.vector_store import VectorStore
 
@@ -298,6 +301,35 @@ class DocumentClassificationNode(DoculensLLMNode):
 
     def after_completion(self, task_context, response_model: ResponseModel):
         task_context.metadata["classification"] = response_model.model_dump()
+
+        try:
+            session = SessionLocal()
+            classification_result = ClassificationResult(
+                label=response_model.document_type,
+                confidence=response_model.confidence,
+                scores=[
+                    ClassificationScore(
+                        label=response_model.document_type,
+                        score=response_model.confidence,
+                    )
+                ],
+                used_text="",
+                candidate_labels=response_model.tags or [response_model.document_type],
+            )
+            record_classification_result(
+                session,
+                document_id=response_model.document_id,
+                result=classification_result,
+                source="llm",
+                classifier_version="prompt:document_classification",
+            )
+        except Exception as exc:  # pragma: no cover - logging only
+            logger.warning("Failed to persist classification history from pipeline: %s", exc)
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
         return task_context
 
 

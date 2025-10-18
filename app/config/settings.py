@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     search_result_limit: int = Field(default=10, ge=1, alias="DOCULENS_SEARCH_RESULT_LIMIT")
     search_preview_limit: int = Field(default=5, ge=1, alias="DOCULENS_SEARCH_PREVIEW_LIMIT")
     chunk_preview_limit: int = Field(default=25, ge=1, alias="DOCULENS_CHUNK_PREVIEW_LIMIT")
+    auth_secret_key: str = Field(default="doculens-dev-secret", alias="DOCULENS_AUTH_SECRET")
+    auth_algorithm: str = Field(default="HS256", alias="DOCULENS_AUTH_ALGORITHM")
+    auth_token_exp_minutes: int = Field(default=120, ge=5, alias="DOCULENS_AUTH_TOKEN_EXP_MINUTES")
 
 
 @lru_cache

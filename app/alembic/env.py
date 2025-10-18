@@ -9,7 +9,8 @@ from app.database.database_utils import DatabaseUtils
 from app.database.session import Base
 
 # This import is required for autogenerate support
-from app.database.event import *
+from app.database.event import *  # noqa: F401,F403
+from app.database.user import *  # noqa: F401,F403
 
 """
 Alembic Environment Module

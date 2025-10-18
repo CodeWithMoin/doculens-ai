@@ -1,38 +1,12 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { fetchRuntimeConfig, setApiConfig } from '../api/client';
 import type { RuntimeConfig } from '../api/types';
+import type { AppSettings, Persona } from './types';
+import { DEFAULT_PERSONAS } from './types';
+import { SettingsContext } from './context';
 
 const STORAGE_KEY = 'doculens.settings';
-
-export type Persona = 'operations-manager' | 'analyst' | 'business-owner' | 'integrator';
-
-export interface AppSettings {
-  apiBaseUrl: string;
-  apiKey: string;
-  chunkPreviewLimit: number;
-  summaryChunkLimit: number;
-  qaTopK: number;
-  searchResultLimit: number;
-  persona: Persona;
-}
-
-interface SettingsContextValue {
-  settings: AppSettings;
-  serverConfig?: RuntimeConfig;
-  isLoaded: boolean;
-  error?: string;
-  updateSettings: (update: Partial<AppSettings>) => void;
-  resetSettings: () => void;
-  setPersona: (persona: Persona) => void;
-}
 
 const defaultSettings: AppSettings = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
@@ -44,6 +18,26 @@ const defaultSettings: AppSettings = {
   persona: 'analyst',
 };
 
+function isPersona(value: string): value is Persona {
+  return DEFAULT_PERSONAS.includes(value as Persona);
+}
+
+function normalisePersona(value: string | undefined, options: Persona[]): Persona {
+  const candidate = typeof value === 'string' ? value.toLowerCase() : undefined;
+  if (candidate && options.includes(candidate as Persona)) {
+    return candidate as Persona;
+  }
+  return options[0];
+}
+
+function derivePersonaOptions(config?: RuntimeConfig): Persona[] {
+  const incoming = config?.persona_options ?? [];
+  const filtered = incoming
+    .map((option) => option.toLowerCase())
+    .filter(isPersona) as Persona[];
+  return filtered.length ? filtered : DEFAULT_PERSONAS;
+}
+
 function parseStoredSettings():
   | { settings: AppSettings; hasStored: boolean }
   | undefined {
@@ -51,19 +45,21 @@ function parseStoredSettings():
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    const merged = {
+      ...defaultSettings,
+      ...parsed,
+    };
     return {
       hasStored: true,
       settings: {
-        ...defaultSettings,
-        ...parsed,
+        ...merged,
+        persona: normalisePersona(merged.persona, DEFAULT_PERSONAS),
       },
     };
   } catch {
     return undefined;
   }
 }
-
-const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const stored = useMemo(() => parseStoredSettings(), []);
@@ -72,6 +68,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [serverConfig, setServerConfig] = useState<RuntimeConfig | undefined>(undefined);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [personaOptions, setPersonaOptions] = useState<Persona[]>(DEFAULT_PERSONAS);
+  const [roleDefinitions, setRoleDefinitions] = useState<RuntimeConfig['role_definitions']>();
 
   useEffect(() => {
     setApiConfig({
@@ -94,6 +92,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setServerConfig(config);
         setApiConfig({ apiKeyHeader: config.api_key_header });
+        setPersonaOptions(derivePersonaOptions(config));
+        setRoleDefinitions(config.role_definitions);
 
         if (!hasStoredRef.current) {
           setSettings((current) => ({
@@ -102,6 +102,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             summaryChunkLimit: config.summary_chunk_limit,
             qaTopK: config.qa_top_k,
             searchResultLimit: config.search_result_limit,
+            persona: normalisePersona(current.persona, derivePersonaOptions(config)),
+          }));
+        } else {
+          setSettings((current) => ({
+            ...current,
+            persona: normalisePersona(current.persona, derivePersonaOptions(config)),
           }));
         }
       })
@@ -127,6 +133,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setSettings((current) => ({
       ...current,
       ...update,
+      persona: update.persona ? normalisePersona(update.persona, personaOptions) : current.persona,
     }));
   };
 
@@ -139,12 +146,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       summaryChunkLimit: serverConfig?.summary_chunk_limit ?? defaultSettings.summaryChunkLimit,
       qaTopK: serverConfig?.qa_top_k ?? defaultSettings.qaTopK,
       searchResultLimit: serverConfig?.search_result_limit ?? defaultSettings.searchResultLimit,
+      persona: normalisePersona(
+        serverConfig?.persona_options?.[0] ?? defaultSettings.persona,
+        personaOptions,
+      ),
     }));
   };
 
   const setPersona = (persona: Persona) => {
     hasStoredRef.current = true;
-    setSettings((current) => ({ ...current, persona }));
+    setSettings((current) => ({ ...current, persona: normalisePersona(persona, personaOptions) }));
   };
 
   return (
@@ -154,6 +165,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         serverConfig,
         isLoaded,
         error,
+        personaOptions,
+        roleDefinitions,
         updateSettings,
         resetSettings,
         setPersona,
@@ -162,12 +175,4 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       {children}
     </SettingsContext.Provider>
   );
-}
-
-export function useSettings(): SettingsContextValue {
-  const context = useContext(SettingsContext);
-  if (!context) {
-    throw new Error('useSettings must be used within a SettingsProvider.');
-  }
-  return context;
 }

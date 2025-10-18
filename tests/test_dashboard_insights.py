@@ -34,7 +34,10 @@ def test_dashboard_insights_shape(monkeypatch):
         'yesterday_summaries': 1,
     }
 
-    monkeypatch.setattr(endpoint_module, 'get_dashboard_insights', lambda session=None: sample_payload)
+    def mock_get_dashboard_insights(session=None):
+        return sample_payload
+    
+    monkeypatch.setattr(endpoint_module, 'get_dashboard_insights', mock_get_dashboard_insights)
 
-    response = endpoint_module.get_dashboard_insights(session=None)
+    response = endpoint_module.get_dashboard_insights()
     assert response == sample_payload

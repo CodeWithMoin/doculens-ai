@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle2, FileText, Loader2, Upload, X } from 'lucide-
 
 import { uploadDocument } from '../api/client';
 import type { UploadResponse } from '../api/types';
-import { useSettings } from '../settings/SettingsProvider';
+import { useSettings } from '../settings/useSettings';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -61,7 +61,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
       setParsedMetadata(undefined);
       addNotification({ title: 'Invalid metadata', description: message, variant: 'error' });
     }
-  }, [metadataText]);
+  }, [metadataText, addNotification]);
 
   useEffect(() => {
     if (isProcessing) return;
@@ -144,7 +144,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
     };
 
     void process();
-  }, [queue, isProcessing, metadataError, parsedMetadata, docType, onUploaded]);
+  }, [queue, isProcessing, metadataError, parsedMetadata, docType, onUploaded, addNotification]);
 
   const handleNativeSelect = () => {
     fileInputRef.current?.click();
@@ -216,8 +216,8 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
   const completedCount = queue.filter((item) => item.status === 'success').length;
 
   const dropZoneClasses = cn(
-    'relative flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-6 transition-colors',
-    isDragActive ? 'border-primary bg-secondary/50' : 'border-border bg-card/80 hover:border-primary/50',
+    'relative flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 bg-surface-subtle p-6 text-center transition-colors',
+    isDragActive ? 'border-primary/60 bg-secondary/60 text-primary' : 'hover:border-border/50',
   );
 
   const summaryHint = useMemo(
@@ -226,7 +226,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
   );
 
   return (
-    <Card className="border-dashed border-border/70 bg-card/80">
+    <Card className="shadow-none">
       <CardHeader className="gap-2">
         <CardTitle className="flex items-center gap-2 text-lg font-semibold">
           <Upload className="h-5 w-5 text-primary" /> Upload & ingest
@@ -243,7 +243,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
           className={dropZoneClasses}
         >
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleInputChange} />
-          <Button variant="secondary" onClick={handleNativeSelect} type="button">
+          <Button variant="outline" onClick={handleNativeSelect} type="button">
             Browse files
           </Button>
           <p className="text-sm text-muted-foreground">or drag & drop PDFs, DOCX, images, or text bundles here</p>
@@ -289,7 +289,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
 
         <div className="space-y-3">
           {queue.length === 0 ? (
-            <p className="rounded-md border border-border/70 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            <p className="rounded-md border border-border/70 bg-surface-subtle px-4 py-3 text-sm text-muted-foreground">
               Queue is empty. Add documents to trigger ingestion. Files upload automatically in the order they are added.
             </p>
           ) : (
@@ -297,10 +297,10 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
               {queue.map((item) => (
                 <li
                   key={item.id}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-card px-4 py-3 shadow-subtle"
+                  className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-white px-4 py-3"
                 >
                   <div className="flex flex-1 items-center gap-3">
-                    <div className="rounded-full bg-secondary p-2 text-secondary-foreground">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-surface-subtle text-muted-foreground">
                       <FileText className="h-4 w-4" />
                     </div>
                     <div className="flex flex-1 flex-col gap-1">

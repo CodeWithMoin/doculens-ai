@@ -4,6 +4,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.api
     container_name: "${PROJECT_NAME}_api"
+    environment:
+      - PYTHONPATH=/
     depends_on:
       - database
       - redis

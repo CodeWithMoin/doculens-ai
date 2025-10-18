@@ -3,6 +3,7 @@ import { Clock, FileText } from 'lucide-react';
 
 import type { DocumentEntry } from '../api/types';
 import { cn } from '../lib/utils';
+import { inferDueDate, inferRole, inferStatus, formatDateTime } from '../lib/routing';
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
@@ -29,11 +30,11 @@ export function DocumentList({ documents, onSelect, selectedId }: DocumentListPr
   }, [documents, filter]);
 
   return (
-    <Card className="border-border/70 bg-card/80">
+    <Card className="shadow-none">
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">Documents</CardTitle>
-          <Badge variant="muted" className="text-[11px] uppercase tracking-wide">
+          <CardTitle className="text-lg font-semibold text-foreground">Documents</CardTitle>
+          <Badge variant="outline" className="text-[11px] uppercase tracking-wide">
             {documents.length}
           </Badge>
         </div>
@@ -42,29 +43,33 @@ export function DocumentList({ documents, onSelect, selectedId }: DocumentListPr
           placeholder="Filter by name, type, or id"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
+          className="h-10 rounded-lg border-platinum-600"
         />
       </CardHeader>
       <CardContent className="flex max-h-[480px] flex-col gap-2 overflow-hidden">
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">
           {filtered.map((doc) => {
             const isSelected = doc.document_id === selectedId;
-            const uploadedAt = new Date(doc.uploaded_at);
+            const uploadedAt = formatDateTime(doc.uploaded_at);
+            const assignedRole = inferRole(doc);
+            const status = inferStatus(doc);
+            const dueAt = formatDateTime(inferDueDate(doc));
             return (
               <button
                 type="button"
                 key={doc.document_id}
                 onClick={() => onSelect(doc)}
                 className={cn(
-                  'w-full rounded-lg border border-border/70 bg-card text-left transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                  isSelected ? 'border-primary/70 bg-primary/5' : '',
+                  'w-full rounded-lg border border-platinum-600 bg-white px-4 py-3 text-left transition-colors hover:border-lapis-500/40 hover:bg-sky-blue-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lapis-500/40',
+                  isSelected ? 'border-lapis-500 bg-sky-blue-900 shadow-sm' : '',
                 )}
               >
-                <div className="flex items-start gap-3 px-4 py-3">
-                  <div className="rounded-full bg-secondary p-2 text-secondary-foreground">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md border border-platinum-600 bg-surface-subtle text-muted-foreground">
                     <FileText className="h-4 w-4" />
                   </div>
                   <div className="flex flex-1 flex-col gap-2">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold text-foreground">
                           {doc.filename ?? doc.document_id}
@@ -74,18 +79,16 @@ export function DocumentList({ documents, onSelect, selectedId }: DocumentListPr
                         </Badge>
                       </div>
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" /> {uploadedAt.toLocaleString()}
+                        <Clock className="h-3 w-3" /> {uploadedAt}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span>{doc.chunk_count ?? 0} chunks</span>
-                      <span>{doc.embedded_chunk_count ?? 0} embedded</span>
-                      {doc.summary?.doc_type ? <span>Summary: {doc.summary.doc_type}</span> : null}
+                      <span>Role: {assignedRole}</span>
+                      <span>Status: {status}</span>
+                      <span>Due: {dueAt}</span>
                     </div>
                     {doc.summary?.summary ? (
-                      <p className="line-clamp-2 text-sm text-muted-foreground/90">
-                        “{doc.summary.summary}”
-                      </p>
+                      <p className="line-clamp-2 text-sm text-muted-foreground/90">“{doc.summary.summary}”</p>
                     ) : (
                       <p className="text-xs text-muted-foreground">Summary pending</p>
                     )}
@@ -95,7 +98,7 @@ export function DocumentList({ documents, onSelect, selectedId }: DocumentListPr
             );
           })}
           {!filtered.length ? (
-            <div className="rounded-lg border border-dashed border-border/70 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/60 bg-surface-subtle px-4 py-6 text-center text-sm text-muted-foreground">
               No matching documents yet.
             </div>
           ) : null}

@@ -3,47 +3,53 @@
 @tailwind utilities;
 
 :root {
-  --docu-background: 215 33% 98%;
-  --docu-foreground: 224 57% 15%;
-  --docu-muted: 215 30% 92%;
-  --docu-muted-foreground: 222 20% 40%;
-  --docu-accent: 215 86% 55%;
-  --docu-accent-foreground: 0 0% 100%;
-  --docu-primary: 219 83% 53%;
+  --docu-background: 156 18% 95%;
+  --docu-foreground: 208 64% 24%;
+  --docu-muted: 175 18% 88%;
+  --docu-muted-foreground: 208 30% 35%;
+  --docu-primary: 207 51% 40%;
   --docu-primary-foreground: 0 0% 100%;
-  --docu-secondary: 204 94% 94%;
-  --docu-secondary-foreground: 215 57% 21%;
-  --docu-destructive: 0 72% 51%;
+  --docu-accent: 203 47% 47%;
+  --docu-accent-foreground: 0 0% 100%;
+  --docu-secondary: 194 45% 68%;
+  --docu-secondary-foreground: 205 60% 20%;
+  --docu-destructive: 0 73% 52%;
   --docu-destructive-foreground: 0 0% 100%;
-  --docu-ring: 219 83% 53%;
-  --docu-input: 216 24% 93%;
-  --docu-border: 216 24% 86%;
+  --docu-ring: 207 51% 40%;
+  --docu-input: 198 32% 84%;
+  --docu-border: 200 28% 82%;
   --docu-card: 0 0% 100%;
-  --docu-card-foreground: 224 57% 15%;
+  --docu-card-foreground: 208 64% 24%;
+  --docu-surface-muted: 194 36% 92%;
+  --docu-surface-subtle: 194 38% 96%;
+  --docu-shadow-color: 205 44% 60%;
   --docu-radius-lg: 16px;
 
   --font-sans: 'Inter', 'system-ui', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace;
 }
 
-.dark {
-  --docu-background: 222 47% 5%;
-  --docu-foreground: 0 0% 98%;
-  --docu-muted: 220 16% 18%;
-  --docu-muted-foreground: 220 12% 60%;
-  --docu-accent: 215 86% 60%;
-  --docu-accent-foreground: 0 0% 100%;
-  --docu-primary: 215 86% 65%;
-  --docu-primary-foreground: 222 47% 5%;
-  --docu-secondary: 214 35% 18%;
-  --docu-secondary-foreground: 0 0% 98%;
-  --docu-destructive: 0 62% 50%;
+:dark {
+  --docu-background: 205 45% 12%;
+  --docu-foreground: 198 56% 92%;
+  --docu-muted: 205 36% 20%;
+  --docu-muted-foreground: 196 24% 72%;
+  --docu-accent: 200 38% 52%;
+  --docu-accent-foreground: 205 45% 12%;
+  --docu-primary: 207 52% 50%;
+  --docu-primary-foreground: 206 66% 12%;
+  --docu-secondary: 202 28% 22%;
+  --docu-secondary-foreground: 198 56% 92%;
+  --docu-destructive: 0 70% 48%;
   --docu-destructive-foreground: 0 0% 100%;
-  --docu-ring: 215 86% 65%;
-  --docu-input: 215 22% 26%;
-  --docu-border: 215 22% 26%;
-  --docu-card: 222 47% 7%;
-  --docu-card-foreground: 0 0% 98%;
+  --docu-ring: 207 52% 50%;
+  --docu-input: 205 28% 26%;
+  --docu-border: 204 26% 28%;
+  --docu-card: 205 26% 16%;
+  --docu-card-foreground: 198 56% 92%;
+  --docu-surface-muted: 205 22% 18%;
+  --docu-surface-subtle: 205 20% 14%;
+  --docu-shadow-color: 205 56% 8%;
 }
 
 * {
@@ -51,7 +57,12 @@
 }
 
 body {
-  @apply min-h-screen bg-background font-sans text-foreground antialiased;
+  @apply min-h-screen font-sans text-[15px] leading-relaxed text-foreground antialiased;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(47, 102, 144, 0.2), transparent 55%),
+    radial-gradient(circle at 80% 10%, rgba(58, 124, 165, 0.18), transparent 50%),
+    radial-gradient(circle at 50% 120%, rgba(129, 195, 215, 0.18), transparent 60%),
+    hsl(var(--docu-background));
 }
 
 #root {
@@ -82,4 +93,18 @@ button, input, textarea {
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--docu-primary) / 0.8);
+}
+
+@layer components {
+  .surface-card {
+    @apply rounded-xl border border-border bg-card text-card-foreground shadow-[0_8px_24px_rgba(15,23,42,0.04)];
+  }
+
+  .surface-section {
+    @apply rounded-xl border border-border/70 bg-surface-subtle text-foreground;
+  }
+
+  .surface-outline {
+    @apply rounded-lg border border-border/70 bg-transparent text-muted-foreground;
+  }
 }

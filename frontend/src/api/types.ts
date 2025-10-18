@@ -20,6 +20,12 @@ export interface DocumentEntry {
   vector_ids?: string[] | null;
   metadata?: Record<string, unknown> | null;
   summary?: DocumentSummary | null;
+  assigned_role?: string | null;
+  status?: string | null;
+  due_at?: string | null;
+  archived_at?: string | null;
+  deleted_at?: string | null;
+  restored_at?: string | null;
 }
 
 export interface ChunkRecord {
@@ -79,6 +85,115 @@ export interface UploadResponse extends EventResponse {
   stored_path: string;
 }
 
+export interface RoleDefinition {
+  label: string;
+  access_level: string;
+  description: string;
+  permissions: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  persona: string;
+  role: string;
+  access_level: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: UserProfile;
+  personas: string[];
+  roles: Record<string, RoleDefinition>;
+}
+
+export interface ClassificationScore {
+  label: string;
+  score: number;
+}
+
+export interface DocumentClassificationResponse {
+  document_id: string;
+  predicted_label: string;
+  confidence: number;
+  scores: ClassificationScore[];
+  candidate_labels: string[];
+  used_text_preview: string;
+  reasoning?: string;
+}
+
+export interface DocumentClassificationRequest {
+  candidate_labels?: string[];
+  hypothesis_template?: string;
+  multi_label?: boolean;
+  text_override?: string;
+  examples?: Array<{
+    label: string;
+    text: string;
+  }>;
+}
+
+export interface LabelTreeNode {
+  id: string | null;
+  name: string;
+  type: 'domain' | 'label';
+  description?: string | null;
+  parent_id?: string | null;
+  workspace_id?: string | null;
+  children: LabelTreeNode[];
+}
+
+export interface LabelsResponse {
+  tree: LabelTreeNode[];
+  candidate_labels: string[];
+}
+
+export interface LabelRequestPayload {
+  label_name: string;
+  description?: string;
+  parent_label_id?: string | null;
+  label_type?: 'domain' | 'label';
+}
+
+export interface LabelResponse {
+  id: string;
+  label_name: string;
+  label_type: 'domain' | 'label';
+  description?: string | null;
+  parent_label_id?: string | null;
+  workspace_id?: string | null;
+}
+
+export interface ClassificationHistoryEntry {
+  id: string;
+  document_id: string;
+  label_name: string;
+  confidence?: number;
+  source: string;
+  classifier_version?: string;
+  user_id?: string | null;
+  notes?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ClassificationOverrideRequest {
+  label_name: string;
+  confidence?: number;
+  notes?: string;
+}
+
+export interface DocumentLifecycleResponse {
+  document_id: string;
+  status: string;
+  archived_at?: string | null;
+  deleted_at?: string | null;
+  restored_at?: string | null;
+  message?: string;
+}
+
 export interface RuntimeConfig {
   app_name: string;
   summary_chunk_limit: number;
@@ -88,6 +203,8 @@ export interface RuntimeConfig {
   chunk_preview_limit: number;
   auth_required: boolean;
   api_key_header: string;
+  persona_options?: string[];
+  role_definitions?: Record<string, RoleDefinition>;
 }
 
 export interface DashboardInsights {

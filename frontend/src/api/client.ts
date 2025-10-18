@@ -1,13 +1,23 @@
 import type {
   ApiError,
+  AuthResponse,
   ChunkRecord,
+  DashboardInsights,
+  ClassificationHistoryEntry,
+  ClassificationOverrideRequest,
+  DocumentLifecycleResponse,
+  DocumentClassificationRequest,
+  DocumentClassificationResponse,
   DocumentEntry,
   EventResponse,
-  DashboardInsights,
   QAHistoryEntry,
+  LabelRequestPayload,
+  LabelResponse,
+  LabelsResponse,
   RuntimeConfig,
   SearchHistoryEntry,
   UploadResponse,
+  UserProfile,
 } from './types';
 
 type QueryParams = Record<string, string | number | boolean | undefined>;
@@ -16,6 +26,7 @@ interface ApiConfig {
   baseUrl: string;
   apiKey?: string;
   apiKeyHeader: string;
+  accessToken?: string;
 }
 
 const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -32,6 +43,14 @@ export function getApiConfig(): ApiConfig {
 
 export function setApiConfig(update: Partial<ApiConfig>) {
   apiConfig = { ...apiConfig, ...update };
+}
+
+export function setAuthToken(token?: string | null) {
+  apiConfig = { ...apiConfig, accessToken: token ?? undefined };
+}
+
+export function clearAuthToken() {
+  apiConfig = { ...apiConfig, accessToken: undefined };
 }
 
 function resolveUrl(path: string, params?: QueryParams): string {
@@ -55,6 +74,10 @@ function buildHeaders(extra?: HeadersInit, includeContentType = false): Headers 
 
   if (apiConfig.apiKey) {
     headers.set(apiConfig.apiKeyHeader, apiConfig.apiKey);
+  }
+
+  if (apiConfig.accessToken) {
+    headers.set('Authorization', `Bearer ${apiConfig.accessToken}`);
   }
 
   return headers;
@@ -84,6 +107,41 @@ export async function fetchDocuments(limit = 20): Promise<DocumentEntry[]> {
     headers: buildHeaders(),
   });
   return handleResponse<DocumentEntry[]>(response);
+}
+
+export async function archiveDocument(documentId: string, reason?: string): Promise<DocumentLifecycleResponse> {
+  const response = await fetch(resolveUrl(`/events/documents/${documentId}/archive`), {
+    method: 'POST',
+    headers: buildHeaders(undefined, true),
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  return handleResponse<DocumentLifecycleResponse>(response);
+}
+
+export async function deleteDocument(
+  documentId: string,
+  options?: { reason?: string; purgeVectors?: boolean },
+): Promise<DocumentLifecycleResponse> {
+  const response = await fetch(
+    resolveUrl(`/events/documents/${documentId}`, {
+      reason: options?.reason,
+      purge_vectors: options?.purgeVectors ?? true,
+    }),
+    {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    },
+  );
+  return handleResponse<DocumentLifecycleResponse>(response);
+}
+
+export async function restoreDocument(documentId: string, reason?: string): Promise<DocumentLifecycleResponse> {
+  const response = await fetch(resolveUrl(`/events/documents/${documentId}/restore`), {
+    method: 'POST',
+    headers: buildHeaders(undefined, true),
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  return handleResponse<DocumentLifecycleResponse>(response);
 }
 
 export async function fetchDocumentChunks(
@@ -156,4 +214,84 @@ export async function uploadDocument(options: {
     body: form,
   });
   return handleResponse<UploadResponse>(response);
+}
+
+export async function login(credentials: { email: string; password: string }): Promise<AuthResponse> {
+  const response = await fetch(resolveUrl('/auth/login'), {
+    method: 'POST',
+    headers: buildHeaders(undefined, true),
+    body: JSON.stringify(credentials),
+  });
+  return handleResponse<AuthResponse>(response);
+}
+
+export async function fetchProfile(): Promise<UserProfile> {
+  const response = await fetch(resolveUrl('/auth/me'), {
+    headers: buildHeaders(),
+  });
+  return handleResponse<UserProfile>(response);
+}
+
+export async function classifyDocument(
+  documentId: string,
+  payload: DocumentClassificationRequest = {},
+): Promise<DocumentClassificationResponse> {
+  const response = await fetch(resolveUrl(`/events/documents/${documentId}/classify`), {
+    method: 'POST',
+    headers: buildHeaders(undefined, true),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<DocumentClassificationResponse>(response);
+}
+
+export async function fetchLabels(): Promise<LabelsResponse> {
+  const response = await fetch(resolveUrl('/events/labels'), {
+    headers: buildHeaders(),
+  });
+  return handleResponse<LabelsResponse>(response);
+}
+
+export async function createLabel(payload: LabelRequestPayload): Promise<LabelResponse> {
+  const response = await fetch(resolveUrl('/events/labels'), {
+    method: 'POST',
+    headers: buildHeaders(undefined, true),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<LabelResponse>(response);
+}
+
+export async function updateLabel(labelId: string, payload: Partial<LabelRequestPayload>): Promise<LabelResponse> {
+  const response = await fetch(resolveUrl(`/events/labels/${labelId}`), {
+    method: 'PATCH',
+    headers: buildHeaders(undefined, true),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<LabelResponse>(response);
+}
+
+export async function deleteLabel(labelId: string, force = false): Promise<void> {
+  const response = await fetch(resolveUrl(`/events/labels/${labelId}`, { force }), {
+    method: 'DELETE',
+    headers: buildHeaders(),
+  });
+  await handleResponse<void>(response);
+}
+
+export async function fetchClassificationHistory(documentId: string): Promise<ClassificationHistoryEntry[]> {
+  const response = await fetch(resolveUrl(`/events/documents/${documentId}/classification-history`), {
+    headers: buildHeaders(),
+  });
+  return handleResponse<ClassificationHistoryEntry[]>(response);
+}
+
+export async function overrideClassification(
+  documentId: string,
+  payload: ClassificationOverrideRequest,
+): Promise<ClassificationHistoryEntry> {
+  const response = await fetch(resolveUrl(`/events/documents/${documentId}/classification-history`), {
+    method: 'POST',
+    headers: buildHeaders(undefined, true),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<ClassificationHistoryEntry>(response);
 }

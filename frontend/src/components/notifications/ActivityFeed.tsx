@@ -12,11 +12,11 @@ const iconMap: Record<string, ComponentType<{ className?: string }>> = {
   default: Activity,
 };
 
-export function ActivityFeed() {
-  const notifications = useNotificationStore((state) => state.notifications).slice(0, 5);
+export function ActivityFeed({ limit = 2 }: { limit?: number }) {
+  const notifications = useNotificationStore((state) => state.notifications).slice(0, limit);
 
   return (
-    <Card className="border-border/70 bg-card/80">
+    <Card className="shadow-none">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle className="text-sm font-semibold text-foreground">Recent activity</CardTitle>
@@ -33,7 +33,7 @@ export function ActivityFeed() {
           notifications.map((item) => {
             const Icon = iconMap[item.variant] ?? iconMap.default;
             return (
-              <div key={item.id} className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+              <div key={item.id} className="flex items-start gap-3 rounded-md border border-border/70 bg-white px-3 py-2">
                 <Icon className="mt-0.5 h-4 w-4 text-primary" />
                 <div className="flex-1">
                   <p className="font-medium text-foreground">{item.title}</p>

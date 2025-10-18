@@ -14,7 +14,7 @@ const LazyChart = lazy(() => import('./TimeSeriesChartInner'));
 
 export function TimeSeriesCard({ title, icon: Icon, data, color = '#2563eb', helper }: TimeSeriesCardProps) {
   return (
-    <Card className="border-border/70 bg-card/80">
+    <Card className="shadow-none">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-semibold text-foreground">{title}</CardTitle>
         {Icon ? <Icon className="h-5 w-5 text-primary" /> : null}

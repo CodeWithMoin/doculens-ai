@@ -1,5 +1,6 @@
 import { type ComponentType, type FormEvent, useEffect, useState } from 'react';
 import { AlertCircle, BookOpen, CornerDownRight, History, Loader2, RefreshCw, Search as SearchIcon, Sparkles } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 import { fetchQaHistory, fetchSearchHistory, postEvent } from '../api/client';
 import type { QAHistoryEntry, SearchHistoryEntry } from '../api/types';
@@ -10,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { useSettings } from '../settings/SettingsProvider';
+import { useSettings } from '../settings/useSettings';
 import { useNotificationStore } from '../stores/notificationStore';
 
 const HISTORY_LIMIT = 50;
@@ -30,6 +31,8 @@ export function QaPage() {
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
   const [isSubmittingSearch, setIsSubmittingSearch] = useState(false);
   const [isSubmittingQa, setIsSubmittingQa] = useState(false);
+
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilters, setSearchFilters] = useState('');
@@ -95,13 +98,32 @@ export function QaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const queryParam = searchParams.get('query');
+  const filtersParam = searchParams.get('filters');
+
+  useEffect(() => {
+    if (queryParam && queryParam !== searchQuery) {
+      setSearchQuery(queryParam);
+    }
+  }, [queryParam]);
+
+  useEffect(() => {
+    if (filtersParam && filtersParam !== searchFilters) {
+      setSearchFilters(filtersParam);
+    } else if (!filtersParam && searchFilters) {
+      setSearchFilters('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersParam]);
+
   const handleSuggestion = (suggestion: string) => {
     setGlobalQaQuestion(suggestion);
   };
 
   const handleSearchSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!searchQuery.trim()) {
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery) {
       setSearchError('Enter a query before running semantic search.');
       return;
     }
@@ -118,17 +140,26 @@ export function QaPage() {
     try {
       const response = await postEvent({
         event_type: 'search_query',
-        query: searchQuery,
-        filters,
+        query: trimmedQuery,
+        filters: filters ?? undefined,
         limit: searchLimit,
       });
       setSearchStatus(`Search queued. Event ${response.event_id}.`);
       addNotification({
         title: 'Search queued',
-        description: `Event ${response.event_id} will populate the workspace shortly.`,
+        description: `Semantic search queued for “${trimmedQuery}” (event ${response.event_id}).`,
         variant: 'success',
         href: '/qa',
       });
+      const params = new URLSearchParams(searchParams);
+      params.set('query', trimmedQuery);
+      const rawFilters = searchFilters.trim();
+      if (rawFilters) {
+        params.set('filters', rawFilters);
+      } else {
+        params.delete('filters');
+      }
+      setSearchParams(params, { replace: true });
       loadSearchHistory();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Search request failed.';

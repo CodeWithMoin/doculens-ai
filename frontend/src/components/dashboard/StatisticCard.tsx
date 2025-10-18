@@ -10,7 +10,7 @@ interface StatisticCardProps {
 
 export function StatisticCard({ title, icon: Icon, children }: StatisticCardProps) {
   return (
-    <Card className="border-border/70 bg-card/80">
+    <Card className="shadow-none">
       <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-2">
         {Icon ? <Icon className="h-5 w-5 text-primary" /> : null}
         <CardTitle className="text-sm font-semibold text-foreground">{title}</CardTitle>

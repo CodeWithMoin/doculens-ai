@@ -1,13 +1,18 @@
 import json
+import string
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import uuid
+from datetime import datetime
+
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from sqlalchemy import text
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.api.dependencies import db_session
 from app.api.event_schema import EventSchema
@@ -16,6 +21,20 @@ from app.config.settings import get_settings
 from app.database.event import Event
 from app.database.repository import GenericRepository
 from app.services.vector_store import VectorStore
+from app.services.classification_service import (
+    ClassificationResult,
+    ClassificationScore,
+    get_classification_service,
+)
+from app.services.classification_audit import record_classification_result
+from app.services.document_lifecycle import (
+    archive_document as archive_document_service,
+    delete_document as delete_document_service,
+    restore_document as restore_document_service,
+)
+from app.services.label_service import LabelConflictError, LabelService
+from app.database.models import DocumentClassificationHistory, DocumentLabel
+from app.services.auth_service import PERSONA_OPTIONS, ROLE_DEFINITIONS
 
 """
 Event Submission Endpoint Module
@@ -45,6 +64,15 @@ def _ensure_ingestion_dir() -> Path:
     return INGESTION_DIR
 
 
+def _strip_ingestion_prefix(filename: str) -> str:
+    """Remove the UUID prefix we add during ingestion when building display names."""
+    candidate = Path(filename).name
+    prefix, sep, remainder = candidate.partition("_")
+    if sep and remainder and len(prefix) >= 32 and all(ch in string.hexdigits for ch in prefix):
+        return remainder
+    return candidate
+
+
 def _store_event_and_dispatch(session: Session, payload: Dict[str, Any]) -> Tuple[Event, str]:
     """Persist an event and enqueue the Celery worker."""
     repository = GenericRepository(session=session, model=Event)
@@ -58,11 +86,204 @@ def _store_event_and_dispatch(session: Session, payload: Dict[str, Any]) -> Tupl
     return event, task_id
 
 
+public_router = APIRouter()
 router = APIRouter()
 HOURLY_RATE = 65
 
 
-@router.get("/config")
+class ClassificationExample(BaseModel):
+    label: str
+    text: str
+
+
+class ClassificationRequest(BaseModel):
+    candidate_labels: Optional[List[str]] = None
+    examples: Optional[List[ClassificationExample]] = None
+    hypothesis_template: Optional[str] = None
+    multi_label: bool = False
+    text_override: Optional[str] = None
+
+
+class ClassificationResponse(BaseModel):
+    document_id: str
+    predicted_label: str
+    confidence: float
+    scores: List[ClassificationScore]
+    candidate_labels: List[str]
+    used_text_preview: str
+    reasoning: Optional[str] = None
+
+
+class LabelTreeNode(BaseModel):
+    id: Optional[str]
+    name: str
+    type: Literal["domain", "label"]
+    description: Optional[str] = None
+    parent_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+    children: List["LabelTreeNode"] = []
+
+
+LabelTreeNode.model_rebuild()
+
+
+class LabelsResponse(BaseModel):
+    tree: List[LabelTreeNode]
+    candidate_labels: List[str]
+
+
+class LabelCreateRequest(BaseModel):
+    label_name: str
+    description: Optional[str] = None
+    parent_label_id: Optional[str] = None
+    label_type: Literal["domain", "label"] = "label"
+
+
+class LabelUpdateRequest(BaseModel):
+    label_name: Optional[str] = None
+    description: Optional[str] = None
+    parent_label_id: Optional[str] = None
+
+
+class LabelResponse(BaseModel):
+    id: str
+    label_name: str
+    label_type: str
+    description: Optional[str]
+    parent_label_id: Optional[str]
+    workspace_id: Optional[str]
+
+
+class ClassificationHistoryEntry(BaseModel):
+    id: str
+    document_id: str
+    label_name: str
+    confidence: Optional[float]
+    source: str
+    classifier_version: Optional[str]
+    user_id: Optional[str]
+    notes: Optional[str]
+    metadata: Dict[str, Any]
+    created_at: datetime
+
+
+class DocumentLifecycleResponse(BaseModel):
+    document_id: str
+    status: str
+    archived_at: Optional[str] = None
+    deleted_at: Optional[str] = None
+    restored_at: Optional[str] = None
+    message: Optional[str] = None
+
+
+class DocumentArchiveRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+def _truncate_text(text: str, max_chars: int = 4000) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars]
+
+
+def _find_document_summary_text(session: Session, document_id: str, search_limit: int = 200) -> Optional[str]:
+    summary_rows = session.execute(
+        text(
+            """
+            SELECT task_context
+            FROM events
+            WHERE data->>'event_type' = 'document_summary'
+            ORDER BY created_at DESC
+            LIMIT :limit
+            """
+        ),
+        {"limit": search_limit},
+    ).mappings()
+
+    for row in summary_rows:
+        task_context = row.get("task_context") or {}
+        metadata = task_context.get("metadata") or {}
+        document_summaries = metadata.get("document_summaries") or {}
+        summary_payload = document_summaries.get(document_id)
+        if isinstance(summary_payload, dict):
+            summary_text = summary_payload.get("summary")
+            if isinstance(summary_text, str) and summary_text.strip():
+                return summary_text
+    return None
+
+
+def _build_document_text(session: Session, document_id: str, chunk_limit: int = 5) -> str:
+    summary_text = _find_document_summary_text(session, document_id)
+    if summary_text:
+        return _truncate_text(summary_text)
+
+    vector_store = VectorStore()
+    try:
+        chunks = vector_store.fetch_document_chunks(document_id=document_id, limit=chunk_limit)
+    except ValueError:
+        chunks = []
+
+    texts: List[str] = []
+    for chunk in chunks:
+        chunk_text = (
+            (chunk.get("contents") if isinstance(chunk, dict) else None)
+            or (chunk.get("text") if isinstance(chunk, dict) else None)
+        )
+        if isinstance(chunk_text, str) and chunk_text.strip():
+            texts.append(chunk_text.strip())
+
+    combined = "\n\n".join(texts).strip()
+    if combined:
+        return _truncate_text(combined)
+    raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Unable to locate document text for classification.")
+
+
+def _stitch_examples_and_text(examples: Optional[Sequence[ClassificationExample]], text: str) -> str:
+    if not examples:
+        return text
+    rendered_examples = [
+        f"Example ({example.label}):\n{example.text.strip()}"
+        for example in examples
+        if isinstance(example.text, str) and example.text.strip()
+    ]
+    if not rendered_examples:
+        return text
+    rendered_examples.append(f"Document:\n{text.strip()}")
+    return _truncate_text("\n\n".join(rendered_examples))
+
+
+def _serialize_label(label: DocumentLabel) -> LabelResponse:
+    return LabelResponse(
+        id=str(label.id),
+        label_name=label.label_name,
+        label_type=label.label_type,
+        description=label.description,
+        parent_label_id=str(label.parent_label_id) if label.parent_label_id else None,
+        workspace_id=str(label.workspace_id) if label.workspace_id else None,
+    )
+
+
+def _convert_tree_nodes(nodes: List[Dict[str, Any]]) -> List[LabelTreeNode]:
+    tree: List[LabelTreeNode] = []
+    for node in nodes:
+        children = _convert_tree_nodes(node.get("children", [])) if node.get("children") else []
+        tree.append(
+            LabelTreeNode(
+                id=node.get("id"),
+                name=node.get("name"),
+                type=node.get("type", "label"),
+                description=node.get("description"),
+                parent_id=node.get("parent_id"),
+                workspace_id=node.get("workspace_id"),
+                children=children,
+            )
+        )
+    return tree
+
+
+
+
+@public_router.get("/config")
 def get_runtime_config() -> Dict[str, Any]:
     """Expose runtime configuration defaults for frontend clients."""
     settings = get_settings()
@@ -75,6 +296,8 @@ def get_runtime_config() -> Dict[str, Any]:
         "chunk_preview_limit": settings.chunk_preview_limit,
         "auth_required": bool(settings.api_key),
         "api_key_header": settings.api_key_header,
+        "persona_options": PERSONA_OPTIONS,
+        "role_definitions": ROLE_DEFINITIONS,
     }
 
 
@@ -139,20 +362,53 @@ def get_dashboard_insights(
     for row in uploads_rows:
         task_context = row.get("task_context") or {}
         metadata = task_context.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
         document_meta = metadata.get("document") or {}
+        if not isinstance(document_meta, dict):
+            document_meta = {}
+        doc_metadata_inner = document_meta.get("metadata") or {}
+        if not isinstance(doc_metadata_inner, dict):
+            doc_metadata_inner = {}
+
+        upload_data = row.get("data") or {}
+        upload_meta_raw = upload_data.get("metadata")
+        upload_meta = upload_meta_raw if isinstance(upload_meta_raw, dict) else {}
+
+        status_value = (
+            document_meta.get("status")
+            or doc_metadata_inner.get("status")
+            or upload_meta.get("status")
+        )
+        status_lower = status_value.lower() if isinstance(status_value, str) else ""
+        deleted_flag = (
+            document_meta.get("deleted")
+            or doc_metadata_inner.get("deleted")
+            or upload_meta.get("deleted")
+        )
+        deleted_at = (
+            document_meta.get("deleted_at")
+            or doc_metadata_inner.get("deleted_at")
+            or upload_meta.get("deleted_at")
+        )
+        if status_lower == "deleted" or deleted_flag or deleted_at:
+            continue
 
         document_id = document_meta.get("id") or str(row.get("id"))
         created_at = _ensure_utc(row.get("created_at"))
 
+        chunk_total = document_meta.get("chunk_count") or 0
+        embedded_total = document_meta.get("embedded_chunk_count") or 0
+
         doc_records[document_id] = {
             "upload_time": created_at,
-            "chunk_count": document_meta.get("chunk_count") or 0,
-            "embedded_count": document_meta.get("embedded_chunk_count") or 0,
+            "chunk_count": chunk_total,
+            "embedded_count": embedded_total,
         }
 
         total_documents += 1
-        chunk_count += document_meta.get("chunk_count") or 0
-        embedded_count += document_meta.get("embedded_chunk_count") or 0
+        chunk_count += chunk_total
+        embedded_count += embedded_total
 
     summarized_doc_ids: Dict[str, datetime] = {}
     summaries_count = 0
@@ -175,7 +431,8 @@ def get_dashboard_insights(
                 if latency > 0:
                     latencies.append(latency)
 
-    summarised_documents = len({**summarized_doc_ids})
+    active_summarised_ids = {doc_id for doc_id in summarized_doc_ids if doc_id in doc_records}
+    summarised_documents = len(active_summarised_ids)
 
     # SLA risk: uploads older than threshold without summary
     sla_threshold = timedelta(hours=4)
@@ -230,6 +487,8 @@ def get_dashboard_insights(
             throughput_buckets[day_key]["total"] += 1
 
     for doc_id, summary_time in summarized_doc_ids.items():
+        if doc_id not in doc_records:
+            continue
         day_key = summary_time.strftime("%Y-%m-%d")
         if day_key in throughput_buckets:
             throughput_buckets[day_key]["summarised"] += 1
@@ -368,23 +627,38 @@ def list_documents(
         task_context = row.get("task_context") or {}
         metadata = task_context.get("metadata") or {}
         document_meta = metadata.get("document") or {}
-        upload_meta = document_meta.get("metadata") or {}
+        doc_metadata_inner = document_meta.get("metadata") or {}
+        upload_data = row.get("data") or {}
+        upload_meta = upload_data.get("metadata") or {}
+        if not isinstance(upload_meta, dict):
+            upload_meta = {}
 
         document_id = document_meta.get("id") or str(row.get("id"))
+        uploaded_name = upload_meta.get("uploaded_filename")
         filename = (
-            upload_meta.get("uploaded_filename")
+            uploaded_name
             or document_meta.get("original_filename")
             or document_meta.get("filename")
         )
-        if filename and "_" in filename and upload_meta.get("uploaded_filename") is None:
-            # Legacy events stored filenames prefixed with random tokens; strip them for display.
-            stripped = filename.partition("_")[2]
-            if stripped:
-                filename = stripped
+
+        if not filename:
+            ingest_path = upload_meta.get("ingest_path") or upload_data.get("filename")
+            if ingest_path:
+                filename = Path(ingest_path).name
+
+        if filename:
+            filename = Path(filename).name
+            if not uploaded_name:
+                filename = _strip_ingestion_prefix(filename)
 
         summary_payload = summary_by_doc.get(document_id)
         if not summary_payload and filename:
             summary_payload = summary_by_filename.get(Path(filename).name)
+
+        status_value = document_meta.get("status") or doc_metadata_inner.get("status") or upload_meta.get("status")
+        status_lower = status_value.lower() if isinstance(status_value, str) else None
+        if status_lower == "deleted":
+            continue
 
         documents.append(
             {
@@ -397,6 +671,16 @@ def list_documents(
                 "embedded_chunk_count": document_meta.get("embedded_chunk_count"),
                 "vector_ids": document_meta.get("vector_ids"),
                 "metadata": document_meta.get("metadata"),
+                "status": status_value,
+                "archived_at": document_meta.get("archived_at")
+                or doc_metadata_inner.get("archived_at")
+                or upload_meta.get("archived_at"),
+                "deleted_at": document_meta.get("deleted_at")
+                or doc_metadata_inner.get("deleted_at")
+                or upload_meta.get("deleted_at"),
+                "restored_at": document_meta.get("restored_at")
+                or doc_metadata_inner.get("restored_at")
+                or upload_meta.get("restored_at"),
                 "summary": summary_payload,
             }
         )
@@ -427,6 +711,234 @@ def get_document_chunks(
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="No chunks found for document")
 
     return chunks
+
+
+@router.post("/documents/{document_id}/classify", response_model=ClassificationResponse)
+def classify_document(
+    document_id: str,
+    payload: ClassificationRequest = Body(default_factory=ClassificationRequest),
+    session: Session = Depends(db_session),
+):
+    """Classify a document using a local zero-shot transformer."""
+    text_source = payload.text_override or _build_document_text(session, document_id)
+    combined_text = _stitch_examples_and_text(payload.examples, text_source)
+
+    label_service = LabelService(session=session)
+    candidate_labels = payload.candidate_labels or label_service.get_candidate_labels()
+    if not candidate_labels:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="No candidate labels available for classification.")
+
+    classifier = get_classification_service()
+    result = classifier.classify(
+        text=combined_text,
+        candidate_labels=candidate_labels,
+        hypothesis_template=payload.hypothesis_template,
+        multi_label=payload.multi_label,
+    )
+
+    # Persist the classification event for audit/history.
+    record_classification_result(
+        session,
+        document_id,
+        result,
+        source="ai",
+        classifier_version=getattr(classifier, "version", None),
+        metadata_extra={"reasoning": result.reasoning} if result.reasoning else None,
+    )
+
+    used_preview = result.used_text[:500]
+    return ClassificationResponse(
+        document_id=document_id,
+        predicted_label=result.label,
+        confidence=result.confidence,
+        scores=result.scores,
+        candidate_labels=result.candidate_labels,
+        used_text_preview=used_preview,
+        reasoning=result.reasoning,
+    )
+
+
+@router.post("/documents/{document_id}/archive", response_model=DocumentLifecycleResponse)
+def archive_document_endpoint(
+    document_id: str,
+    payload: Optional[DocumentArchiveRequest] = Body(default=None),
+    session: Session = Depends(db_session),
+) -> DocumentLifecycleResponse:
+    try:
+        result = archive_document_service(
+            session,
+            document_id,
+            reason=payload.reason if payload else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=str(exc)) from exc
+    return DocumentLifecycleResponse(**result, message="Document archived.")
+
+
+@router.delete("/documents/{document_id}", response_model=DocumentLifecycleResponse)
+def delete_document_endpoint(
+    document_id: str,
+    reason: Optional[str] = Query(default=None),
+    purge_vectors: bool = Query(default=True),
+    session: Session = Depends(db_session),
+) -> DocumentLifecycleResponse:
+    try:
+        result = delete_document_service(
+            session,
+            document_id,
+            reason=reason,
+            purge_vectors=purge_vectors,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=str(exc)) from exc
+    return DocumentLifecycleResponse(**result, message="Document deleted.")
+
+
+@router.post("/documents/{document_id}/restore", response_model=DocumentLifecycleResponse)
+def restore_document_endpoint(
+    document_id: str,
+    payload: Optional[DocumentArchiveRequest] = Body(default=None),
+    session: Session = Depends(db_session),
+) -> DocumentLifecycleResponse:
+    try:
+        result = restore_document_service(
+            session,
+            document_id,
+            reason=payload.reason if payload else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=str(exc)) from exc
+    return DocumentLifecycleResponse(**result, message="Document restored.")
+
+
+@router.get("/labels", response_model=LabelsResponse)
+def list_labels(session: Session = Depends(db_session)) -> LabelsResponse:
+    label_service = LabelService(session=session)
+    tree = _convert_tree_nodes(label_service.get_label_tree())
+    candidate_labels = label_service.get_candidate_labels()
+    return LabelsResponse(tree=tree, candidate_labels=candidate_labels)
+
+
+@router.post("/labels", response_model=LabelResponse, status_code=HTTPStatus.CREATED)
+def create_label(payload: LabelCreateRequest, session: Session = Depends(db_session)) -> LabelResponse:
+    parent_id = uuid.UUID(payload.parent_label_id) if payload.parent_label_id else None
+    label_service = LabelService(session=session)
+    try:
+        label = label_service.create_label(
+            label_name=payload.label_name,
+            description=payload.description,
+            parent_label_id=parent_id,
+            label_type=payload.label_type,
+        )
+    except LabelConflictError as exc:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(exc)) from exc
+    return _serialize_label(label)
+
+
+@router.patch("/labels/{label_id}", response_model=LabelResponse)
+def update_label(label_id: str, payload: LabelUpdateRequest, session: Session = Depends(db_session)) -> LabelResponse:
+    label_service = LabelService(session=session)
+    try:
+        label = label_service.update_label(
+            uuid.UUID(label_id),
+            label_name=payload.label_name,
+            description=payload.description,
+            parent_label_id=uuid.UUID(payload.parent_label_id) if payload.parent_label_id else None,
+        )
+    except LabelConflictError as exc:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc)) from exc
+    return _serialize_label(label)
+
+
+@router.delete("/labels/{label_id}", status_code=HTTPStatus.NO_CONTENT)
+def delete_label(label_id: str, force: bool = Query(default=False), session: Session = Depends(db_session)) -> Response:
+    label_service = LabelService(session=session)
+    try:
+        label_service.delete_label(uuid.UUID(label_id), force=force)
+    except ValueError as exc:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc)) from exc
+    return Response(status_code=HTTPStatus.NO_CONTENT)
+
+
+@router.get(
+    "/documents/{document_id}/classification-history",
+    response_model=List[ClassificationHistoryEntry],
+)
+def get_classification_history(document_id: str, session: Session = Depends(db_session)) -> List[ClassificationHistoryEntry]:
+    query = (
+        select(DocumentClassificationHistory)
+        .where(DocumentClassificationHistory.document_id == document_id)
+        .order_by(DocumentClassificationHistory.created_at.desc())
+    )
+    rows = session.execute(query).scalars().all()
+    return [
+        ClassificationHistoryEntry(
+            id=str(row.id),
+            document_id=row.document_id,
+            label_name=row.label_name,
+            confidence=row.confidence,
+            source=row.source,
+            classifier_version=row.classifier_version,
+            user_id=str(row.user_id) if row.user_id else None,
+            notes=row.notes,
+            metadata=row.metadata or {},
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+
+
+class ClassificationOverrideRequest(BaseModel):
+    label_name: str
+    confidence: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.post(
+    "/documents/{document_id}/classification-history",
+    response_model=ClassificationHistoryEntry,
+)
+def override_classification(
+    document_id: str,
+    payload: ClassificationOverrideRequest,
+    session: Session = Depends(db_session),
+) -> ClassificationHistoryEntry:
+    confidence = payload.confidence if payload.confidence is not None else 1.0
+    manual_result = ClassificationResult(
+        label=payload.label_name,
+        confidence=confidence,
+        scores=[ClassificationScore(label=payload.label_name, score=confidence)],
+        used_text="",
+        candidate_labels=[payload.label_name],
+    )
+    history = record_classification_result(
+        session,
+        document_id,
+        manual_result,
+        source="user",
+        classifier_version=None,
+        user_id=None,
+        metadata_extra={"notes": payload.notes} if payload.notes else None,
+        notes=payload.notes,
+    )
+    return ClassificationHistoryEntry(
+        id=str(history.id),
+        document_id=history.document_id,
+        label_name=history.label_name,
+        confidence=history.confidence,
+        source=history.source,
+        classifier_version=history.classifier_version,
+        user_id=str(history.user_id) if history.user_id else None,
+        notes=history.notes,
+        metadata=history.metadata or {},
+        created_at=history.created_at,
+    )
 
 
 @router.post("/documents/upload", status_code=HTTPStatus.ACCEPTED)
