@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Archive, Brain, CheckCircle2, CircleDashed, FileText, Loader2, MessageSquare, Trash2 } from 'lucide-react';
 
@@ -38,7 +39,7 @@ interface DocumentDetailProps {
 
 export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps) {
   const { settings } = useSettings();
-  const [qaQuestion, setQaQuestion] = useState('');
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [banner, setBanner] = useState<{ type: 'info' | 'error'; text: string } | null>(null);
   const [classification, setClassification] = useState<DocumentClassificationResponse | null>(null);
@@ -224,54 +225,6 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
         text: message,
       });
       addNotification({ title: 'Summary failed to queue', description: message, variant: 'error' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const runQA = async () => {
-    if (!document) {
-      setBanner({
-        type: 'error',
-        text: 'This document is no longer available for QA.',
-      });
-      return;
-    }
-    if (!qaQuestion.trim()) {
-      setBanner({
-        type: 'error',
-        text: 'Please enter a question before running QA.',
-      });
-      return;
-    }
-    setBanner(null);
-    setIsSubmitting(true);
-    try {
-      const response: EventResponse = await postEvent({
-        event_type: 'qa_query',
-        query: qaQuestion,
-        top_k: settings.qaTopK,
-        filters: { document_id: document.document_id },
-      });
-      setQaQuestion('');
-      setBanner({
-        type: 'info',
-        text: `QA task queued. Event ${response.event_id}.`,
-      });
-      addNotification({
-        title: 'QA task queued',
-        description: `Event ${response.event_id} will deliver an answer shortly.`,
-        variant: 'success',
-        href: '/qa',
-      });
-      onEventQueued?.('qa_query', document.document_id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to queue QA query';
-      setBanner({
-        type: 'error',
-        text: message,
-      });
-      addNotification({ title: 'QA request failed', description: message, variant: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -492,24 +445,22 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
             <span>Document #{document.document_id}</span>
             <span>Uploaded {uploadedAt}</span>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-2">
-              <CardTitle className="text-2xl font-semibold leading-tight text-foreground">{documentTitle}</CardTitle>
-              <CardDescription className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <span>Role: {assignedRole}</span>
-                <span>Status: {status}</span>
-                <span>Due: {dueAt}</span>
-              </CardDescription>
-              {document.summary?.doc_type ? (
-                <dl className="flex flex-wrap gap-4 text-xs text-muted-foreground/90">
-                  <div>
-                    <dt className="font-medium text-foreground/80">Summary tag</dt>
-                    <dd>{document.summary.doc_type}</dd>
-                  </div>
-                </dl>
-              ) : null}
-            </div>
-            <div className="flex flex-col gap-2 sm:items-end">
+          <div className="space-y-3">
+            <CardTitle className="text-2xl font-semibold leading-tight text-foreground">{documentTitle}</CardTitle>
+            <CardDescription className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span>Role: {assignedRole}</span>
+              <span>Status: {status}</span>
+              <span>Due: {dueAt}</span>
+            </CardDescription>
+            {document.summary?.doc_type ? (
+              <dl className="flex flex-wrap gap-4 text-xs text-muted-foreground/90">
+                <div>
+                  <dt className="font-medium text-foreground/80">Summary tag</dt>
+                  <dd>{document.summary.doc_type}</dd>
+                </div>
+              </dl>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2 sm:justify-start">
               <Button
                 onClick={reissueSummary}
                 disabled={isSubmitting || isArchived || isDeleted}
@@ -520,12 +471,12 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
                 Summarise again
               </Button>
               <Button
-                onClick={() => setQaQuestion((current) => current || `What are the key details in ${documentTitle}?`)}
+                onClick={() => document && navigate(`/qa?document=${document.document_id}`)}
                 variant="outline"
-                className="text-sm"
-                disabled={isArchived || isDeleted}
+                className="gap-2 text-sm"
               >
-                Prefill QA prompt
+                <MessageSquare className="h-4 w-4" />
+                Open in QA Studio
               </Button>
               <Button
                 onClick={runClassification}
@@ -814,34 +765,34 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
         </Card>
       ) : null}
 
-      <ProcessingTimeline stages={pipelineStages} />
-
-      {summaryItems}
-
-      <CapturedFields metadata={document.metadata} />
-
-      <Card className="shadow-none">
-        <CardHeader className="gap-1">
-          <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-            <MessageSquare className="h-5 w-5 text-primary" /> Ask a question
-          </CardTitle>
-          <CardDescription>Using top_k = {settings.qaTopK}. Adjust under Settings if needed.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea
-            placeholder="What would you like to know about this document?"
-            value={qaQuestion}
-            onChange={(event) => setQaQuestion(event.target.value)}
-            rows={4}
-          />
-          <div className="flex justify-end">
-            <Button onClick={runQA} disabled={isSubmitting} className="gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Run QA
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {summaryItems ? (
+        <>
+          {summaryItems}
+          <ProcessingTimeline stages={pipelineStages} />
+        </>
+      ) : (
+        <>
+          <ProcessingTimeline stages={pipelineStages} />
+          <Card className="border-dashed border-primary/40 bg-primary/5 shadow-none">
+            <CardHeader className="flex flex-col gap-2">
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold text-primary">
+                <FileText className="h-5 w-5" />
+                No summary yet
+              </CardTitle>
+              <CardDescription className="text-sm text-primary/80">
+                Generate a summary to see key highlights and recommended next steps right here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">Summaries help reviewers get context before diving into stage progress.</span>
+              <Button onClick={reissueSummary} disabled={isSubmitting || isArchived || isDeleted} className="gap-2">
+                <Brain className={cn('h-4 w-4', isSubmitting ? 'animate-spin' : '')} />
+                Generate summary
+              </Button>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
@@ -873,58 +824,4 @@ function ProcessingTimeline({ stages }: { stages: ReturnType<typeof derivePipeli
       </CardContent>
     </Card>
   );
-}
-
-function CapturedFields({ metadata }: { metadata: DocumentEntry['metadata'] }) {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const source = extractFieldSource(metadata);
-  if (!source) return null;
-
-  const entries = Object.entries(source).filter(([, value]) => {
-    if (value === null || value === undefined) return false;
-    const type = typeof value;
-    return type === 'string' || type === 'number' || type === 'boolean';
-  });
-
-  if (!entries.length) return null;
-
-  return (
-    <Card className="shadow-none">
-      <CardHeader className="flex flex-col gap-1">
-        <CardTitle className="text-sm font-semibold text-foreground">Captured fields</CardTitle>
-        <CardDescription>Key facts extracted automatically from the document.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-2 sm:grid-cols-2">
-        {entries.slice(0, 8).map(([key, value]) => (
-          <div key={key} className="rounded-lg border border-platinum-600 bg-white px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">{toLabel(key)}</p>
-            <p className="text-sm text-foreground">{String(value)}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function extractFieldSource(metadata: Record<string, unknown>): Record<string, unknown> | null {
-  const documentBlock = metadata.document;
-  if (documentBlock && typeof documentBlock === 'object' && !Array.isArray(documentBlock)) {
-    return documentBlock as Record<string, unknown>;
-  }
-
-  const extractedFields = metadata.extracted_fields;
-  if (extractedFields && typeof extractedFields === 'object' && !Array.isArray(extractedFields)) {
-    return extractedFields as Record<string, unknown>;
-  }
-
-  return metadata;
-}
-
-function toLabel(key: string): string {
-  return key
-    .replace(/[_-]+/g, ' ')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b([a-z])/g, (match) => match.toUpperCase());
 }

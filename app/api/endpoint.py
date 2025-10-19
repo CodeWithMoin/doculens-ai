@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 from datetime import datetime
 
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Response, UploadFile
@@ -320,6 +320,81 @@ def _ensure_utc(value: Any) -> Optional[datetime]:
     return None
 
 
+def _estimate_due_at(
+    upload_time: Optional[datetime],
+    doc_type: Optional[str],
+    priority: Optional[str] = None,
+) -> Optional[datetime]:
+    if upload_time is None:
+        return None
+
+    hours = 48
+
+    if priority:
+        priority_lower = str(priority).strip().lower()
+        if priority_lower in {"critical", "urgent", "high"}:
+            hours = 24
+        elif priority_lower in {"low", "backlog", "non-urgent"}:
+            hours = 72
+
+    if doc_type:
+        doc_type_lower = doc_type.lower()
+        invoice_keywords = ("invoice", "receipt", "billing", "tax", "finance")
+        hr_keywords = ("resume", "offer", "onboard", "training", "background", "hr", "employee", "leave")
+        legal_keywords = ("agreement", "contract", "legal", "nda")
+
+        if any(keyword in doc_type_lower for keyword in invoice_keywords):
+            hours = min(hours, 36)
+        elif any(keyword in doc_type_lower for keyword in hr_keywords):
+            hours = max(hours, 72)
+        elif any(keyword in doc_type_lower for keyword in legal_keywords):
+            hours = max(hours, 96)
+
+    return upload_time + timedelta(hours=hours)
+
+
+def _resolve_due_at(
+    upload_time: Optional[datetime],
+    doc_type: Optional[str],
+    metadata_sources: Iterable[Dict[str, Any]],
+) -> Optional[datetime]:
+    candidate_keys = (
+        "due_at",
+        "due_date",
+        "due",
+        "deadline",
+        "sla_due",
+        "sla_due_at",
+        "expected_at",
+        "expected_by",
+        "expected_completion",
+    )
+
+    priority_value: Optional[str] = None
+
+    for source in metadata_sources:
+        if not isinstance(source, dict):
+            continue
+        if priority_value is None:
+            priority_value = source.get("priority") or source.get("urgency")
+        for key in candidate_keys:
+            value = source.get(key)
+            if value is None:
+                continue
+            if isinstance(value, (int, float)) and upload_time is not None:
+                try:
+                    hours = float(value)
+                except (TypeError, ValueError):
+                    hours = 0.0
+                if hours > 0:
+                    return upload_time + timedelta(hours=hours)
+            dt_value = _ensure_utc(value)
+            if dt_value is not None:
+                return dt_value
+
+    return _estimate_due_at(upload_time, doc_type, priority_value)
+
+
 @router.get("/insights/dashboard")
 def get_dashboard_insights(
     session: Session = Depends(db_session),
@@ -400,10 +475,21 @@ def get_dashboard_insights(
         chunk_total = document_meta.get("chunk_count") or 0
         embedded_total = document_meta.get("embedded_chunk_count") or 0
 
+        due_at_dt = _resolve_due_at(
+            created_at,
+            document_meta.get("doc_type"),
+            (
+                document_meta,
+                doc_metadata_inner,
+                upload_meta,
+            ),
+        )
+
         doc_records[document_id] = {
             "upload_time": created_at,
             "chunk_count": chunk_total,
             "embedded_count": embedded_total,
+            "due_at": due_at_dt,
         }
 
         total_documents += 1
@@ -442,8 +528,14 @@ def get_dashboard_insights(
         if not isinstance(upload_time, datetime):
             continue
         summary_time = summarized_doc_ids.get(doc_id)
-        if summary_time is None and now - upload_time > sla_threshold:
-            sla_risk_count += 1
+        due_at_candidate = record.get("due_at")
+        if isinstance(due_at_candidate, datetime):
+            if summary_time is None and now > due_at_candidate:
+                sla_risk_count += 1
+        else:
+            sla_threshold = timedelta(hours=4)
+            if summary_time is None and now - upload_time > sla_threshold:
+                sla_risk_count += 1
 
     def humanize_duration(seconds: float) -> str:
         total_minutes = int(round(seconds / 60))
@@ -660,6 +752,16 @@ def list_documents(
         if status_lower == "deleted":
             continue
 
+        due_at_value = _resolve_due_at(
+            _ensure_utc(row.get("created_at")),
+            document_meta.get("doc_type"),
+            (
+                document_meta,
+                doc_metadata_inner,
+                upload_meta,
+            ),
+        )
+
         documents.append(
             {
                 "event_id": str(row.get("id")),
@@ -672,6 +774,7 @@ def list_documents(
                 "vector_ids": document_meta.get("vector_ids"),
                 "metadata": document_meta.get("metadata"),
                 "status": status_value,
+                "due_at": due_at_value.isoformat() if isinstance(due_at_value, datetime) else None,
                 "archived_at": document_meta.get("archived_at")
                 or doc_metadata_inner.get("archived_at")
                 or upload_meta.get("archived_at"),

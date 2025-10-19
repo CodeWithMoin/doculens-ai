@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle2, CircleDashed, Loader2 } from 'lucide-react';
 
 import { fetchDocuments } from '../api/client';
 import type { DocumentEntry } from '../api/types';
@@ -8,8 +7,9 @@ import { DocumentDetail } from '../components/DocumentDetail';
 import { DocumentList } from '../components/DocumentList';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { derivePipelineStages, type PipelineStage } from '../lib/pipeline';
+import { derivePipelineStages } from '../lib/pipeline';
 import { inferStatus } from '../lib/routing';
+import { cn } from '../lib/utils';
 
 export function PipelinePage() {
   const [documents, setDocuments] = useState<DocumentEntry[]>([]);
@@ -86,8 +86,6 @@ export function PipelinePage() {
     [visibleDocuments, documents, selectedId],
   );
 
-  const timeline = useMemo<PipelineStage[]>(() => (selectedDocument ? derivePipelineStages(selectedDocument) : []), [selectedDocument]);
-
   const handleEventQueued = (eventType: string, documentId?: string) => {
     if (eventType === 'document_restored') {
       setView('active');
@@ -97,20 +95,57 @@ export function PipelinePage() {
     loadDocuments(documentId);
   };
 
+  const pipelineSummary = useMemo(() => {
+    let needsSummary = 0;
+    let needsRouting = 0;
+    let completed = 0;
+
+    activeDocuments.forEach((doc) => {
+      const stages = derivePipelineStages(doc);
+      const summaryStage = stages.find((stage) => stage.id === 'summary');
+      const routingStage = stages.find((stage) => stage.id === 'routing');
+      if (stages.every((stage) => stage.state === 'complete')) {
+        completed += 1;
+      }
+      if (summaryStage && summaryStage.state !== 'complete') {
+        needsSummary += 1;
+      }
+      if (routingStage && routingStage.state !== 'complete') {
+        needsRouting += 1;
+      }
+    });
+
+    return {
+      active: activeDocuments.length,
+      archived: archivedDocuments.length,
+      completed,
+      needsSummary,
+      needsRouting,
+      inFlight: Math.max(activeDocuments.length - completed, 0),
+    };
+  }, [activeDocuments, archivedDocuments]);
+
   return (
     <div className="grid gap-8 xl:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
       <div className="flex flex-col gap-6">
         <Card className="shadow-none">
           <CardHeader className="flex flex-col gap-1">
-            <CardTitle className="text-sm font-semibold text-foreground">Pipeline tracker</CardTitle>
-            <CardDescription>Visualise each stage of the digitisation workflow.</CardDescription>
+            <CardTitle className="text-sm font-semibold text-foreground">Pipeline overview</CardTitle>
+            <CardDescription>Quick snapshot of throughput and bottlenecks.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {timeline.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Select a document to see its progress through the pipeline.</p>
-            ) : (
-              timeline.map((stage) => <PipelineStep key={stage.id} stage={stage} />)
-            )}
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <PipelineMetric label="Active in flight" value={pipelineSummary.inFlight} helper="Processing or enrichment underway" />
+            <PipelineMetric label="Ready to handoff" value={pipelineSummary.completed} helper="All stages completed" tone="success" />
+            <PipelineMetric label="Needs summary" value={pipelineSummary.needsSummary} helper="Awaiting AI summary or QA" tone="warning" />
+            <PipelineMetric label="Needs routing" value={pipelineSummary.needsRouting} helper="Assign owner or due date" tone="warning" />
+          </CardContent>
+          <CardContent className="border-t border-border/60 pt-4">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {pipelineSummary.active.toLocaleString()} active · {pipelineSummary.archived.toLocaleString()} archived
+              </span>
+              <span>Updated {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -156,23 +191,28 @@ export function PipelinePage() {
   );
 }
 
-function PipelineStep({ stage }: { stage: PipelineStage }) {
-  const icon =
-    stage.state === 'complete' ? (
-      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-    ) : stage.state === 'active' ? (
-      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-    ) : (
-      <CircleDashed className="h-4 w-4 text-muted-foreground" />
-    );
+function PipelineMetric({
+  label,
+  value,
+  helper,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: number;
+  helper: string;
+  tone?: 'neutral' | 'success' | 'warning';
+}) {
+  const palette: Record<'neutral' | 'success' | 'warning', string> = {
+    neutral: 'border-border/60 bg-white',
+    success: 'border-emerald-200 bg-emerald-50',
+    warning: 'border-amber-200 bg-amber-50',
+  };
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-white px-4 py-3 text-sm">
-      {icon}
-      <div className="flex flex-col">
-        <span className="font-medium text-foreground">{stage.label}</span>
-        <span className="text-xs text-muted-foreground">{stage.description}</span>
-      </div>
+    <div className={cn('rounded-2xl border px-4 py-3 shadow-[0_8px_20px_rgba(47,102,144,0.08)]', palette[tone])}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-foreground">{value.toLocaleString()}</p>
+      <p className="text-xs text-muted-foreground">{helper}</p>
     </div>
   );
 }

@@ -12,10 +12,14 @@ export interface NotificationItem {
   href?: string;
 }
 
+type NotificationInput = Omit<NotificationItem, 'id' | 'timestamp' | 'read'> & {
+  timestamp?: number;
+};
+
 interface NotificationStore {
   notifications: NotificationItem[];
   toasts: NotificationItem[];
-  addNotification: (input: Omit<NotificationItem, 'id' | 'timestamp' | 'read'>) => void;
+  addNotification: (input: NotificationInput) => void;
   dismissToast: (id: string) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
@@ -28,13 +32,15 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   toasts: [],
   addNotification: (input) => {
     const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const timestamp =
+      input.timestamp !== undefined && Number.isFinite(input.timestamp) ? input.timestamp : Date.now();
     const notification: NotificationItem = {
       id,
       title: input.title,
       description: input.description,
       variant: input.variant,
       href: input.href,
-      timestamp: Date.now(),
+      timestamp,
       read: false,
     };
 

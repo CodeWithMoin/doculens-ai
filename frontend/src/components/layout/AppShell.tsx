@@ -1,18 +1,11 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  UsersRound,
-  GitBranch,
-  Settings,
-  Search,
-  Plus,
-  Loader2,
-} from 'lucide-react';
+import { LayoutDashboard, UsersRound, GitBranch, MessageSquare, Settings, Search, Plus, Loader2 } from 'lucide-react';
 
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
+import { Badge } from '../ui/badge';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { NotificationToaster } from '../notifications/NotificationToaster';
 import { ProfileMenu } from '../profile/ProfileMenu';
@@ -31,6 +24,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Intake', icon: LayoutDashboard },
   { to: '/work-queues', label: 'Work Queues', icon: UsersRound },
   { to: '/pipeline', label: 'Pipeline', icon: GitBranch },
+  { to: '/qa', label: 'QA Studio', icon: MessageSquare },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -53,7 +47,7 @@ export function AppShell({
   headerAction,
   children,
   productName = 'DocuLens AI',
-  productTagline = 'Operations Console',
+  productTagline = 'Digitize every document. Route every task.',
   onLaunchUpload,
 }: AppShellProps) {
   const navigate = useNavigate();
@@ -138,8 +132,10 @@ export function AppShell({
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-72 flex-shrink-0 border-r border-platinum-600 bg-platinum-900 px-6 py-8 shadow-[16px_0_48px_rgba(47,102,144,0.08)] md:sticky md:top-0 md:flex md:h-screen md:flex-col md:overflow-y-auto">
         <div className="flex h-full flex-col gap-6">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-muted-foreground">{productName}</p>
+          <div className="space-y-3">
+            <Badge className="w-fit border-lapis-500/40 bg-lapis-500/10 text-xs font-semibold uppercase tracking-[0.25em] text-lapis-500">
+              {productName}
+            </Badge>
             <h1 className="text-xl font-semibold text-foreground">{productTagline}</h1>
           </div>
 
@@ -156,6 +152,8 @@ export function AppShell({
               </NavLink>
             ))}
           </nav>
+
+          <div className="mt-auto text-xs text-muted-foreground" />
 
           <div className="mt-auto rounded-2xl border border-dotted border-lapis-500/50 bg-lapis-500/5 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-lapis-600">Digitisation playbook</p>
@@ -176,7 +174,7 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 min-h-0 flex-col">
         <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
           <div className="flex flex-col gap-3 px-4 py-4 sm:px-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -245,7 +243,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex flex-1 flex-col gap-8 px-6 pb-12 pt-8 lg:px-10">{children}</main>
+        <main className="flex flex-1 min-h-0 flex-col gap-8 px-6 pb-12 pt-8 lg:px-10">{children}</main>
       </div>
 
       <NotificationToaster />
@@ -262,9 +260,9 @@ function navLinkPillClass(isActive: boolean) {
 
 function sidebarLinkClass(isActive: boolean) {
   return cn(
-    'flex items-center gap-3 rounded-xl px-4 py-2 text-sm font-medium transition-colors',
+    'group flex items-center gap-3 rounded-xl px-4 py-2 text-sm font-medium transition-all',
     isActive
-      ? 'bg-lapis-500/10 text-lapis-500 shadow-[0_10px_24px_rgba(47,102,144,0.18)]'
-      : 'text-muted-foreground hover:bg-lapis-500/5',
+      ? 'bg-gradient-to-r from-lapis-500/15 via-lapis-500/10 to-transparent text-lapis-600 shadow-[0_12px_32px_rgba(47,102,144,0.18)] ring-1 ring-inset ring-lapis-500/40 backdrop-blur-sm'
+      : 'text-muted-foreground hover:bg-lapis-500/5 hover:text-foreground',
   );
 }

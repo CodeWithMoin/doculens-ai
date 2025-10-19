@@ -46,7 +46,7 @@ export function DocumentList({ documents, onSelect, selectedId }: DocumentListPr
           className="h-10 rounded-lg border-platinum-600"
         />
       </CardHeader>
-      <CardContent className="flex max-h-[480px] flex-col gap-2 overflow-hidden">
+      <CardContent className="flex max-h-[60vh] flex-col gap-2 overflow-hidden">
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">
           {filtered.map((doc) => {
             const isSelected = doc.document_id === selectedId;

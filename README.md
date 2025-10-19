@@ -1,76 +1,74 @@
 # DocuLens AI Console
 
-DocuLens is our end-to-end document intelligence platform: a FastAPI/Celery
-backend orchestrates ingestion, summarisation, semantic search, and Q&A, while
-the React console provides the control room for analysts to triage documents in
-real time.
+DocuLens AI is a full-stack document intelligence workstation. The FastAPI/Celery
+backend ingests files, runs summarisation and retrieval pipelines, and exposes a
+task-driven event API. The React (Vite + TypeScript) console gives analysts,
+operations teams, and integrators a control room for uploads, work queues, QA,
+and governance.
 
-This repository contains everything needed to run the DocuLens stack locally or
-in CI, including the pipelines, Timescale/pgvector integration, and a frontend
-designed for rapid operator feedback.
-
----
-
-## Feature Highlights
-
-- **Event-driven ingestion pipeline** – Queue `document_upload` events and let
-  the Celery worker orchestrate extraction, chunking, embedding, and storage.
-- **LLM-powered summaries** – Trigger `document_summary` jobs that read from the
-  vector store with configurable chunk limits.
-- **Semantic search & QA** – Use the `/events/search/history` and
-  `/events/qa/history` endpoints (or the workspace UI) to explore results with
-  preserved metadata and references.
-- **Persona-aware React console** – Analysts, operations managers, business
-  stakeholders, and integrators each get tailored quickstarts, metrics, and copy.
-- **Notifications & activity feed** – Uploads, QA jobs, and search results raise
-  toasts and surface in a persistent notification bell and dashboard feed.
-- **Governance-ready settings** – Revamped settings page with API key controls,
-  persona selection, and integration playbook snippets for faster onboarding.
-- **Insights dashboard** – Backend `/events/insights/dashboard` aggregates
-  throughput, ROI, compliance, and SLA risk for the operations KPIs.
-- **Automated verification** – Pytest suite and GitHub Actions workflow assert
-  API behaviour, event dispatch, and pipeline defaults on every push (including
-  coverage for the dashboard insights endpoint).
+This repository contains the entire stack used in local development and CI:
+pipelines, Timescale/pgvector integration, a modern UI, and supporting scripts.
 
 ---
 
-## Architecture Overview
+## Highlights
+
+- **Event-driven pipelines** – Queue `document_upload`, `document_summary`,
+  `qa_query`, and related events. Celery orchestrates extraction, chunking,
+  embedding, and persistence to Timescale Vector.
+- **Operator-first console** – Intake dashboards, role-aware work queues
+  (Finance, Compliance, Operations, Legal, HR, Integrator), and the dedicated QA
+  Studio keep reviewers in flow.
+- **Retrieval-augmented QA** – QA Studio streams pending questions, polling for
+  answers without requiring A page reload. Pending states surface inline with
+  animated typing indicators and citations.
+- **Insights & notifications** – Uploads, QA completions, and routing actions
+  raise toasts and persist in the activity feed. Polling keeps stakeholders
+  informed when answers or summaries finish processing.
+- **Governance-ready settings** – Persona selection, API key management, and
+  configurable limits (chunk preview, QA `top_k`, search result counts) are
+  exposed in the console with local persistence.
+- **Comprehensive automation** – Docker Compose environments, smoke-test
+  scripts, pytest coverage, and GitHub Actions ensure the pipelines remain
+  reliable as the product evolves.
+
+---
+
+## Architecture at a Glance
 
 ```text
 ┌──────────────────┐        ┌──────────────────────┐        ┌──────────────────┐
 │ React Console    │ ─────▶ │ FastAPI Gateway      │ ─────▶ │ PostgreSQL/      │
-│ (Vite + TS)      │        │  /events endpoints    │        │ Timescale + pgvec│
-└──────────────────┘        │   └ Celery dispatcher │        └──────────────────┘
+│ (Vite + TS)      │        │  /events endpoints   │        │ Timescale + pgvec│
+└──────────────────┘        │   └ Celery dispatcher│        └──────────────────┘
          ▲                  │                      │                 ▲
          │                  └──────────────┬──────┘                 │
          │                                 │                        │
          │                  ┌──────────────▼───────────────┐        │
          └──────────────────┤ Celery Worker (pipelines)    │ ◀──────┘
-                            │  • chunking/embedding        │
-                            │  • summaries / QA / search   │
-                            │  • vector store operations   │
+                            │  • chunking & embedding      │
+                            │  • summarisation & QA        │
+                            │  • semantic search           │
                             └──────────────────────────────┘
 ```
 
-Key technologies:
-
-- **Backend:** FastAPI, SQLAlchemy, Celery, Timescale Vector, OpenAI/Anthropic LLM
-- **Storage:** PostgreSQL/TimescaleDB for events and vectors, Redis for Celery
-- **Frontend:** React 18, TypeScript, Vite, CSS Modules
-- **Tooling:** Docker Compose, pytest, GitHub Actions
+**Backend**: FastAPI, SQLAlchemy, Celery, TimescaleDB + pgvector, Redis  
+**LLM/Retrieval**: OpenAI/Anthropic (configurable), in-house chunker/tokeniser  
+**Frontend**: React 18, TypeScript, Vite, Tailwind, shadcn/ui components  
+**Tooling**: Docker Compose, pytest, GitHub Actions, scripts for smoke testing
 
 ---
 
 ## Repository Layout
 
 ```text
-app/                # FastAPI application, pipelines, services, tasks
-frontend/           # React console (Vite + TypeScript)
-docker/             # Docker Compose + container assets
-requests/           # Example event payloads & sender script
-scripts/            # Smoke tests and operational helpers
-tests/              # Pytest suite covering API + pipeline logic
-.github/workflows/  # Continuous integration configuration
+app/                FastAPI application, pipelines, Celery tasks
+frontend/           React console (Vite + TypeScript)
+docker/             Container definitions and compose files
+requests/           Sample payloads and helper scripts
+scripts/            Developer utilities and smoke tests
+tests/              Pytest suite covering API & pipelines
+.github/workflows/  Continuous integration pipelines
 ```
 
 ---
@@ -81,226 +79,122 @@ tests/              # Pytest suite covering API + pipeline logic
 
 - Python 3.12+
 - Node.js 18+
-- Docker Desktop (for Postgres/Timescale, Redis, and auxiliary services)
-- Make sure you have OpenAI (or Anthropic) credentials configured in `.env`
-  according to `app/config/llm_config.py`.
+- Docker Desktop (Postgres/Timescale, Redis, ancillary services)
+- OpenAI or Anthropic credentials (configure in `.env`)
 
-### 1. Clone and set environment variables
-
-```bash
-git clone <your repo url>
-cd Doculens AI
-cp .env.example .env   # if you already have one, update values below instead
-
-# Required env vars (set in .env)
-export DOCULENS_API_KEY="your-local-key"          # optional for local dev
-export DOCULENS_API_KEY_HEADER="X-API-Key"       # customise if needed
-export DOCULENS_SUMMARY_CHUNK_LIMIT=12
-export DOCULENS_QA_TOP_K=5
-export DOCULENS_SEARCH_RESULT_LIMIT=10
-export DOCULENS_CHUNK_PREVIEW_LIMIT=25
-
-# Database overrides if you prefer local Postgres over docker defaults
-export DATABASE_HOST=localhost
-export DATABASE_USER=postgres
-export DATABASE_PASSWORD=postgres
-export DATABASE_NAME=doculens
-```
-
-> The backend falls back to sane defaults, but setting the `DOCULENS_*`
-> variables lets you expose consistent limits to the frontend and pipelines.
-
-### 2. Bootstrap backend services (one-liner)
-
-You can launch the full stack—Docker services, FastAPI, Celery, and the Vite
-console—with the helper script:
+### 1. Clone & configure environment
 
 ```bash
-./scripts/dev_stack.sh
+git clone <repo-url>
+cd "Doculens AI"
+cp .env.example .env
+# edit .env with provider keys, database overrides, and doculens settings
 ```
 
-The script:
+Key variables:
 
-- Stops any stray dev processes and frees ports 8080/5173
-- Restarts the Postgres/Redis containers via Docker Compose
-- Runs `uvicorn` and the Celery worker from your virtualenv
-- Starts `npm run dev` inside `frontend/`
+| Variable | Purpose |
+| --- | --- |
+| `DOCULENS_SUMMARY_CHUNK_LIMIT` | Max chunks fed into the summariser |
+| `DOCULENS_QA_TOP_K` | Retrieval breadth for QA Studio |
+| `DOCULENS_SEARCH_RESULT_LIMIT` | Default search pagination |
+| `DATABASE_*` | Optional overrides when not using Docker Postgres |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | LLM provider credentials |
 
-Leave it running while you work; press `Ctrl+C` to shut down the app processes
-(containers are left running for quick restarts).
-
-### Manual start (if you prefer)
+### 2. Start the stack
 
 ```bash
-# Create a Python virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install backend dependencies
-pip install --upgrade pip
-pip install -r app/requirements.txt
-
-# Start Postgres/Timescale & Redis
-docker compose -f docker/docker-compose.yml up -d database redis
-
-# Apply database migrations (UUID events table)
-./app/migrate.sh   # or alembic upgrade head
-
-# Run the API (localhost:8080) and Celery worker
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
-# in another terminal
-celery -A tasks.tasks worker --loglevel=info
+./scripts/dev_stack.sh         # boots Postgres, Redis, API, worker, UI
 ```
 
-### 3. Launch the React console
+Backends start on `http://localhost:8080`, the console on `http://localhost:5173`.
+
+### 3. Frontend in development mode
 
 ```bash
 cd frontend
 npm install
-npm run dev   # defaults to http://localhost:5173
+npm run dev
 ```
 
-If you used `scripts/dev_stack.sh`, the console is already running. Otherwise
-open it in a browser, navigate to **Settings**, and set the API base URL (e.g.
-`http://localhost:8080`). If you configured an API key, paste it into the
-console; otherwise leave blank for local development.
+### 4. Run tests
+
+```bash
+.venv/bin/python -m pytest     # backend + pipeline coverage
+```
 
 ---
 
-## Using DocuLens
+## Everyday Workflows
 
-### Document ingestion
-
-1. Go to **Documents → Upload new document** in the console, or POST to
-   `/events/documents/upload` with a multipart request (see below).
-2. The API persists the file under `data/ingestion/` and enqueues a
-   `document_upload` event.
-3. The Celery worker runs extraction, chunking, embedding, and stores the task
-   context on the `events` table.
-
-### Summaries
-
-- From the document detail page, press **Summarise Again**. The frontend POSTs a
-  `document_summary` event with the configured chunk limit.
-- The summary is displayed alongside bullet points, next steps, and source chunk
-  counts.
-
-### Semantic search & QA
-
-- Use the **Workspace** tab to trigger semantic searches or corpus-wide QA.
-- Results and QA responses are appended to `/events/search/history` and
-  `/events/qa/history`, which the console reads to populate preview panes.
-
-### Notifications & activity feed
-
-- Actions you take (uploads, summaries, QA requests) trigger toasts via the
-  notification bell; the **Recent activity** card on the Documents page keeps a
-  scrolling history of the latest pipeline events.
-- The console also polls for new QA answers and search results, alerting you
-  when a response is ready without a manual refresh.
+1. **Upload documents** – use the Intake page or POST to `/events/documents/upload`.
+   Uploaded files appear in the Intake dashboard and work queues with automatic
+   status tags.
+2. **Process & route** – Work Queues group documents by inferred or assigned
+   role (Finance, Compliance, Operations, Legal, HR, Integrator). HR-specific
+   labels (Resume/CV, Offer Letter, Training Certificate, etc.) now stay within
+   the HR lane.
+3. **Summarise** – Document detail pages expose “Summarise again”. If no
+   summary exists, placeholders prompt operators to run one (and the processing
+   timeline remains visible).
+4. **Ask questions** – QA Studio stores per-document chat history, keeps pending
+   messages visible with typing indicators, and pulls in completed answers
+   automatically—no page refresh needed.
+5. **Stay informed** – Notification toasts and the bell keep track of uploads,
+   QA completions, routing changes, and summary jobs.
 
 ---
 
-## API Reference
+## API Quick Reference
 
-All routes sit under the `/events` prefix. Authentication is enforced via the
-header defined in `DOCULENS_API_KEY_HEADER` when `DOCULENS_API_KEY` is set.
+All routes live under `/events`. Authentication is controlled via the header
+defined by `DOCULENS_API_KEY_HEADER` when `DOCULENS_API_KEY` is set.
 
-| Method | Route                              | Description                                                  |
-| ------ | ---------------------------------- | ------------------------------------------------------------ |
-| GET    | `/events/config`                   | Returns runtime defaults, header name, and auth requirement. |
-| GET    | `/events/insights/dashboard`       | Aggregated metrics for throughput, savings, and compliance.  |
-| GET    | `/events`                          | List most recent raw events + task contexts.                 |
-| GET    | `/events/documents`                | Latest ingested documents with metadata & summaries.         |
-| GET    | `/events/documents/{id}/chunks`    | Preview chunks for a document, obeying `chunk_preview_limit`.|
-| POST   | `/events/documents/upload`         | Multipart upload (`file`, optional `doc_type`, `metadata`).  |
-| POST   | `/events`                          | Generic event ingestion (summary, QA, search, etc.).         |
-| GET    | `/events/search/history`           | Recent semantic searches with preview results.               |
-| GET    | `/events/qa/history`               | Latest QA answers, reasoning, citations, chunk refs.         |
+| Method | Route | Description |
+| --- | --- | --- |
+| `POST` | `/events/documents/upload` | Multipart upload (`file`, `doc_type`, `metadata`) |
+| `POST` | `/events` | Generic event ingestion (summary, QA, search, routing) |
+| `GET` | `/events/documents` | Latest documents + metadata |
+| `GET` | `/events/qa/history` | Historical QA answers, citations, reasoning |
+| `GET` | `/events/search/history` | Semantic search history with snippets |
+| `GET` | `/events/insights/dashboard` | Throughput, SLA risk, ROI metrics |
 
-### Upload example
+Example upload:
 
 ```bash
 curl -X POST "http://localhost:8080/events/documents/upload" \
   -H "X-API-Key: ${DOCULENS_API_KEY:-local-dev}" \
   -F "file=@/path/to/document.pdf" \
-  -F 'doc_type=contract' \
-  -F 'metadata={"case_id":"acme-42"}'
-```
-
-Successful responses include `event_id`, `task_id`, the original filename, and
-the on-disk path used by the ingestion pipeline.
-
----
-
-## Frontend Console
-
-The React app (Vite + TypeScript) lives in `frontend/` and exposes three main
-views:
-
-- **Documents** – filterable list of uploaded files, chunk previews, summary
-  metadata, local QA form, and pipeline banners.
-- **Workspace** – run ad-hoc semantic searches and corpus-wide QA, with live
-  history feeds and metadata inspection.
-- **Settings** – configure API base URL/key and override chunk/search/QA limits
-  (persisted to `localStorage`).
-
-The API client automatically propagates the configured key via the correct
-header, and all responses surface errors in-context.
-
-To build for production:
-
-```bash
-cd frontend
-npm run build
-npm run preview
+  -F 'doc_type=resume' \
+  -F 'metadata={"role":"HR","source":"careers-portal"}'
 ```
 
 ---
 
 ## Testing & Automation
 
-- **Unit & endpoint tests:**
-
-  ```bash
-  .venv/bin/python -m pytest
-  ```
-
-  The suite includes FastAPI `TestClient` coverage for uploads/config endpoints
-  and ensures the semantic search pipeline honours configured limits.
-
-- **Smoke tests:** `scripts/backend_smoke.sh` replays sample events via
-  `requests/send_event.py` and asserts `event_id`/`task_id` payloads.
-
-- **GitHub Actions:** `.github/workflows/backend-ci.yml` installs
-  `app/requirements.txt` and runs pytest on every push and pull request.
+- **Unit & integration tests:** `pytest` targets FastAPI endpoints, pipeline
+  orchestration, and dashboard metrics.
+- **Smoke tests:** `scripts/backend_smoke.sh` replays sample events. Use
+  `requests/send_event.py` to post custom payloads.
+- **Continuous integration:** `.github/workflows/backend-ci.yml` runs linting
+  and pytest on every push/PR.
+- **Frontend builds:** `npm run build && npm run preview` produce a static Vite
+  bundle for deployment.
 
 ---
 
-## Operational Notes
+## Roadmap & Ideas
 
-- **Start everything:** `./scripts/dev_stack.sh`
-- **Stop everything:** `./scripts/dev_stack_stop.sh`
-- **Inspecting events:** connect to the database (`events` table) to view raw
-  pipeline outputs per event.
-- **Vector store:** `services/vector_store.VectorStore` wraps Timescale Vector
-  operations (`semantic_search`, `fetch_document_chunks`, `upsert`, etc.).
-- **Environment tuning:** the `DOCULENS_*` env vars bound via `Settings`
-  propagate through the API, pipelines, and frontend configuration endpoint.
-
----
-
-## Roadmap
-
-- Configure production-ready build pipeline (Docker images for API, worker, UI).
-- Add role-based access to the console (read-only vs operator actions).
-- Layer in additional analytical tasks (document classification, extraction,
-  routing) already scaffolded in `pipelines/`.
-- Extend monitoring with Prometheus/Grafana dashboards fed by Celery events.
+- Harden production deployment (container images + helm charts).
+- Add role-based access controls inside the console.
+- Expand analytics with richer HR/Finance KPIs and Prometheus scraping.
+- Extend extraction pipelines with structured field capture.
 
 ---
 
 ## License
 
-The DocuLens codebase is distributed under the CodeWithMoin license. See
-[`LICENSE`](LICENSE) for the full terms of use.
+DocuLens AI is released under the CodeWithMoin license. Refer to
+[`LICENSE`](LICENSE) for terms.
+

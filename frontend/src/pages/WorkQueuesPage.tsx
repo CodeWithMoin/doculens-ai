@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle,
   CheckCircle2,
   Clock,
   Filter,
-  FolderOpen,
+  Info,
   LayoutGrid,
   ListChecks,
   MoveRight,
   SlidersHorizontal,
-  Users,
 } from 'lucide-react';
 
 import { fetchDocuments } from '../api/client';
@@ -18,6 +16,8 @@ import type { DocumentEntry } from '../api/types';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
 import { ROLE_ORDER, formatDateTime, inferDueDate, inferRole, inferStatus } from '../lib/routing';
 import type { RoleKey } from '../lib/routing';
 import { cn } from '../lib/utils';
@@ -35,19 +35,97 @@ interface QueueRoleStats {
   pending: number;
 }
 
+type SummaryTone = 'neutral' | 'warning' | 'critical' | 'success';
+
+const PREF_KEYS = {
+  viewMode: 'doculens_queue_view_mode',
+  activeSegment: 'doculens_queue_segment',
+  sortOption: 'doculens_queue_sort',
+  detailsVisible: 'doculens_queue_details',
+};
+
+function loadPreference<T>(key: string, fallback: T, validator: (value: unknown) => value is T): T {
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) {
+      return fallback;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (validator(parsed)) {
+      return parsed;
+    }
+  } catch (error) {
+    console.warn(`Failed to load preference for ${key}`, error);
+  }
+  return fallback;
+}
+
+function savePreference(key: string, value: unknown) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.warn(`Failed to persist preference for ${key}`, error);
+  }
+}
+
 export function WorkQueuesPage() {
   const [documents, setDocuments] = useState<DocumentEntry[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchValue, setSearchValue] = useState(searchParams.get('q') ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [activeSegment, setActiveSegment] = useState<'all' | 'overdue' | 'due-soon' | 'completed'>('all');
-  const [sortOption, setSortOption] = useState<'due-soon' | 'recent-upload' | 'status'>('due-soon');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() =>
+    loadPreference(PREF_KEYS.viewMode, 'list', (value): value is 'list' | 'grid' => value === 'list' || value === 'grid'),
+  );
+  const [activeSegment, setActiveSegment] = useState<'all' | 'overdue' | 'due-soon' | 'completed'>(() =>
+    loadPreference(
+      PREF_KEYS.activeSegment,
+      'all',
+      (value): value is 'all' | 'overdue' | 'due-soon' | 'completed' =>
+        value === 'all' || value === 'overdue' || value === 'due-soon' || value === 'completed',
+    ),
+  );
+  const [sortOption, setSortOption] = useState<'due-soon' | 'recent-upload' | 'status'>(() =>
+    loadPreference(
+      PREF_KEYS.sortOption,
+      'due-soon',
+      (value): value is 'due-soon' | 'recent-upload' | 'status' =>
+        value === 'due-soon' || value === 'recent-upload' || value === 'status',
+    ),
+  );
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [selectedDocTypes, setSelectedDocTypes] = useState<Set<string>>(new Set());
+  const [urgencyFilter, setUrgencyFilter] = useState<'any' | 'overdue' | 'due-soon' | 'future' | 'no-sla'>('any');
+  const [isDetailsVisible, setIsDetailsVisible] = useState<boolean>(() =>
+    loadPreference(PREF_KEYS.detailsVisible, false, (value): value is boolean => typeof value === 'boolean'),
+  );
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [reassigningDocumentId, setReassigningDocumentId] = useState<string | null>(null);
+  const [pendingReassignRole, setPendingReassignRole] = useState<RoleKey>(ROLE_ORDER[0]);
 
   const selectedRole = (searchParams.get('role') as RoleKey | null) ?? 'Finance';
+
+  useEffect(() => {
+    savePreference(PREF_KEYS.viewMode, viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    savePreference(PREF_KEYS.activeSegment, activeSegment);
+  }, [activeSegment]);
+
+  useEffect(() => {
+    savePreference(PREF_KEYS.sortOption, sortOption);
+  }, [sortOption]);
+
+  useEffect(() => {
+    savePreference(PREF_KEYS.detailsVisible, isDetailsVisible);
+  }, [isDetailsVisible]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -155,11 +233,20 @@ export function WorkQueuesPage() {
     return Array.from(set).sort();
   }, [selectedDocuments]);
 
+  const urgencyOptions: Array<{ value: typeof urgencyFilter; label: string; helper: string }> = [
+    { value: 'any', label: 'All urgencies', helper: 'Show every item regardless of due date.' },
+    { value: 'overdue', label: 'Overdue', helper: 'Due date has passed.' },
+    { value: 'due-soon', label: 'Due soon', helper: 'Due within the next 48 hours.' },
+    { value: 'future', label: 'Scheduled', helper: 'Due date is more than 48 hours away.' },
+    { value: 'no-sla', label: 'No SLA date', helper: 'No due date detected in metadata.' },
+  ];
+
   const handleClearFilters = () => {
     setSearchValue('');
     setActiveSegment('all');
     setSortOption('due-soon');
     setSelectedDocTypes(new Set());
+    setUrgencyFilter('any');
     setIsFilterPanelOpen(false);
     setSearchParams((params) => {
       params.delete('q');
@@ -210,7 +297,31 @@ export function WorkQueuesPage() {
         })
       : base;
 
-    const sorted = [...filteredByDocType].sort((a, b) => {
+    const filteredByUrgency =
+      urgencyFilter === 'any'
+        ? filteredByDocType
+        : filteredByDocType.filter((doc) => {
+            const due = inferDueDate(doc);
+            if (!due) {
+              return urgencyFilter === 'no-sla';
+            }
+            const dueTime = Date.parse(due);
+            if (Number.isNaN(dueTime)) {
+              return urgencyFilter === 'no-sla';
+            }
+            if (urgencyFilter === 'overdue') {
+              return dueTime < now;
+            }
+            if (urgencyFilter === 'due-soon') {
+              return dueTime >= now && dueTime <= soonThreshold;
+            }
+            if (urgencyFilter === 'future') {
+              return dueTime > soonThreshold;
+            }
+            return true;
+          });
+
+    const sorted = [...filteredByUrgency].sort((a, b) => {
       if (sortOption === 'recent-upload') {
         const aTime = Date.parse(a.uploaded_at ?? '') || 0;
         const bTime = Date.parse(b.uploaded_at ?? '') || 0;
@@ -240,7 +351,52 @@ export function WorkQueuesPage() {
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [selectedDocuments, activeSegment, searchValue, sortOption, selectedDocTypes]);
+  }, [selectedDocuments, activeSegment, searchValue, sortOption, selectedDocTypes, urgencyFilter]);
+
+  const selectedDocument = useMemo(
+    () => filteredDocuments.find((doc) => doc.document_id === selectedDocumentId) ?? null,
+    [filteredDocuments, selectedDocumentId],
+  );
+
+  const hasActiveFilters =
+    activeSegment !== 'all' ||
+    searchValue.trim() !== '' ||
+    selectedDocTypes.size > 0 ||
+    sortOption !== 'due-soon' ||
+    urgencyFilter !== 'any';
+  const activeFiltersCount =
+    (activeSegment !== 'all' ? 1 : 0) +
+    (searchValue.trim() !== '' ? 1 : 0) +
+    (selectedDocTypes.size > 0 ? 1 : 0) +
+    (sortOption !== 'due-soon' ? 1 : 0) +
+    (urgencyFilter !== 'any' ? 1 : 0);
+  const filtersSummary = hasActiveFilters
+    ? `${activeFiltersCount} active filter${activeFiltersCount === 1 ? '' : 's'}`
+    : 'No filters applied';
+
+  useEffect(() => {
+    if (filteredDocuments.length === 0) {
+      setSelectedDocumentId(null);
+      setReassigningDocumentId(null);
+      setPendingReassignRole(ROLE_ORDER[0]);
+      return;
+    }
+    if (!selectedDocument) {
+      const firstDoc = filteredDocuments[0];
+      setSelectedDocumentId(firstDoc.document_id);
+      setPendingReassignRole(inferRole(firstDoc));
+      setReassigningDocumentId(null);
+    }
+  }, [filteredDocuments, selectedDocument]);
+
+  const handleSelectDocument = (docId: string) => {
+    setSelectedDocumentId(docId);
+    setReassigningDocumentId((current) => (current === docId ? current : null));
+    const doc = documents.find((entry) => entry.document_id === docId);
+    if (doc) {
+      setPendingReassignRole(inferRole(doc));
+    }
+  };
 
   const handleRoleChange = (role: RoleKey) => {
     setSearchParams((params) => {
@@ -264,15 +420,103 @@ export function WorkQueuesPage() {
     });
   };
 
+  const handleRequestReassign = (doc: DocumentEntry) => {
+    handleSelectDocument(doc.document_id);
+    setIsDetailsVisible(true);
+    setReassigningDocumentId(doc.document_id);
+    setPendingReassignRole(inferRole(doc));
+  };
+
+  const handleCancelReassign = () => {
+    if (selectedDocument) {
+      setPendingReassignRole(inferRole(selectedDocument));
+    } else {
+      setPendingReassignRole(ROLE_ORDER[0]);
+    }
+    setReassigningDocumentId(null);
+  };
+
+  const handleConfirmReassign = () => {
+    if (!reassigningDocumentId) return;
+    const targetDoc = documents.find((doc) => doc.document_id === reassigningDocumentId);
+    if (!targetDoc) {
+      setReassigningDocumentId(null);
+      return;
+    }
+    const nextRole = pendingReassignRole;
+    const currentRole = inferRole(targetDoc);
+    if (nextRole === currentRole) {
+      setReassigningDocumentId(null);
+      return;
+    }
+
+    setDocuments((prev) =>
+      prev.map((doc) => {
+        if (doc.document_id !== reassigningDocumentId) {
+          return doc;
+        }
+        const updatedMetadata = { ...(doc.metadata ?? {}), assigned_role: nextRole };
+        return {
+          ...doc,
+          assigned_role: nextRole,
+          metadata: updatedMetadata,
+        };
+      }),
+    );
+
+    setReassigningDocumentId(null);
+    setPendingReassignRole(nextRole);
+    if (selectedRole !== nextRole) {
+      handleRoleChange(nextRole);
+    }
+    setSelectedDocumentId(targetDoc.document_id);
+    setIsDetailsVisible(true);
+  };
+
+  const showDetailsPanel = isDetailsVisible && !!selectedDocument;
+  const detailStatusClass = selectedDocument ? getStatusClass(inferStatus(selectedDocument)) : '';
+  const detailDueRaw = selectedDocument ? inferDueDate(selectedDocument) : null;
+  const detailDueClass = getDueClass(detailDueRaw ?? undefined);
+  const detailDueLabel = detailDueRaw ? formatDateTime(detailDueRaw) : 'No SLA date';
+  const detailOwnerName = selectedDocument ? getOwnerName(selectedDocument, inferRole(selectedDocument)) : '';
+  const detailOwnerInitials = selectedDocument ? getOwnerInitials(selectedDocument, inferRole(selectedDocument)) : '';
+  const selectedDocumentRole = selectedDocument ? inferRole(selectedDocument) : 'Unassigned';
+
   return (
-    <div className="bg-surface-subtle px-2 pb-6 pt-2 sm:px-4 lg:px-6 xl:px-8">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">Workflow routing</p>
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Work queues</h1>
+    <div className="bg-surface-subtle px-2 pb-0 pt-2 sm:px-4 lg:px-6 xl:px-4">
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">Workflow routing</p>
+          <div className="flex flex-col gap-2 text-foreground sm:flex-row sm:items-end sm:justify-between">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Work queues</h1>
+            <span className="text-sm text-muted-foreground">Viewing {selectedRole} · {roleStats.total} items</span>
           </div>
-          <span className="text-sm text-muted-foreground">Viewing {selectedRole} · {roleStats.total} items</span>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-3xl border border-border/60 bg-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {selectedRole} queue snapshot
+            </p>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                Showing {filteredDocuments.length.toLocaleString()} of {selectedDocuments.length.toLocaleString()} items
+              </span>
+              <Badge
+                variant={hasActiveFilters ? 'accent' : 'muted'}
+                className={cn('rounded-full px-2 py-0 text-[11px] uppercase tracking-[0.14em]', !hasActiveFilters && 'text-muted-foreground')}
+              >
+                {filtersSummary}
+              </Badge>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <QueueSummaryPill label="In queue" value={roleStats.total} />
+            <QueueSummaryPill label="Active" value={roleStats.pending} />
+            <QueueSummaryPill label="Due soon" value={roleStats.dueSoon} tone="warning" />
+            <QueueSummaryPill label="Overdue" value={roleStats.overdue} tone="critical" />
+            <QueueSummaryPill label="Completed" value={roleStats.completed} tone="success" />
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -283,6 +527,7 @@ export function WorkQueuesPage() {
               size="sm"
               className="gap-2"
               onClick={() => setIsFilterPanelOpen((prev) => !prev)}
+              aria-expanded={isFilterPanelOpen}
             >
               <SlidersHorizontal className="h-4 w-4" />
               Filters
@@ -297,36 +542,57 @@ export function WorkQueuesPage() {
                   prev === 'due-soon' ? 'recent-upload' : prev === 'recent-upload' ? 'status' : 'due-soon',
                 )
               }
+              aria-label="Change sort order"
             >
               <Clock className="h-4 w-4" />
               Sort: {sortOption === 'due-soon' ? 'Due date' : sortOption === 'recent-upload' ? 'Recent upload' : 'Status'}
             </Button>
+            {hasActiveFilters ? (
+              <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
           </div>
-          <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-white p-1">
-            <Button
-              type="button"
-              size="icon"
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              onClick={() => setViewMode('list')}
-              aria-pressed={viewMode === 'list'}
-              className="h-8 w-8"
-            >
-              <ListChecks className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              onClick={() => setViewMode('grid')}
-              aria-pressed={viewMode === 'grid'}
-              className="h-8 w-8"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-white p-1">
+              <Button
+                type="button"
+                size="icon"
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
+                className="h-8 w-8"
+              >
+                <ListChecks className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                onClick={() => setViewMode('grid')}
+                aria-pressed={viewMode === 'grid'}
+                className="h-8 w-8"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-white p-1">
+              <Button
+                type="button"
+                size="icon"
+                variant={showDetailsPanel ? 'default' : 'ghost'}
+                onClick={() => setIsDetailsVisible((prev) => !prev)}
+                aria-pressed={showDetailsPanel ? 'true' : 'false'}
+                className="h-8 w-8"
+                disabled={filteredDocuments.length === 0}
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr),minmax(0,0.9fr)]">
+        <div className={cn('grid gap-6', showDetailsPanel ? 'lg:grid-cols-[minmax(0,1.45fr),minmax(0,0.8fr)]' : '')}>
           <div className="flex flex-col gap-6">
             <Card className="overflow-hidden rounded-3xl border border-platinum-600 bg-white shadow-[0_18px_48px_rgba(112,99,244,0.08)]">
               <div className="flex flex-col">
@@ -338,7 +604,8 @@ export function WorkQueuesPage() {
                         variant={role === selectedRole ? 'default' : 'ghost'}
                         size="sm"
                         onClick={() => handleRoleChange(role)}
-                        className="capitalize"
+                        className="rounded-full capitalize"
+                        aria-pressed={role === selectedRole}
                       >
                         {role}
                         <CountBubble
@@ -355,6 +622,7 @@ export function WorkQueuesPage() {
                         value={searchValue}
                         onChange={(event) => setSearchValue(event.target.value)}
                         placeholder="Search by filename, status, or metadata"
+                        aria-label="Search queue"
                         className="flex-1 border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
                       />
                     </div>
@@ -362,50 +630,69 @@ export function WorkQueuesPage() {
                       Apply
                     </Button>
                   </form>
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {segments.map((segment) => (
-                        <Button
-                          key={segment.value}
-                          type="button"
-                          variant={activeSegment === segment.value ? 'default' : 'ghost'}
-                          size="sm"
-                          className="rounded-full"
-                          onClick={() => setActiveSegment(segment.value)}
-                        >
-                          {segment.label}
-                          <CountBubble count={segment.count} highlight={activeSegment === segment.value} />
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground">Sort mode: {sortOption === 'due-soon' ? 'Due date' : sortOption === 'recent-upload' ? 'Recent upload' : 'Status'}</span>
-                      <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters}>
-                        Clear filters
+                  <div className="flex flex-wrap items-center gap-2">
+                    {segments.map((segment) => (
+                      <Button
+                        key={segment.value}
+                        type="button"
+                        variant={activeSegment === segment.value ? 'default' : 'ghost'}
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setActiveSegment(segment.value)}
+                        aria-pressed={activeSegment === segment.value}
+                      >
+                        {segment.label}
+                        <CountBubble count={segment.count} highlight={activeSegment === segment.value} />
                       </Button>
-                    </div>
+                    ))}
                   </div>
-                  {isFilterPanelOpen && docTypeOptions.length ? (
-                    <div className="rounded-2xl border border-dashed border-border/60 bg-white/70 px-4 py-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Document type</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {docTypeOptions.map((type) => {
-                          const label = type
-                            .replace(/_/g, ' ')
-                            .replace(/\b\w/g, (char) => char.toUpperCase());
-                          const checked = selectedDocTypes.has(type);
-                          return (
-                            <label key={type} className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleDocType(type)}
-                                className="h-4 w-4 rounded border-border/60"
-                              />
-                              <span className={checked ? 'font-medium text-foreground' : undefined}>{label}</span>
-                            </label>
-                          );
-                        })}
+                  {isFilterPanelOpen ? (
+                    <div className="rounded-2xl border border-dashed border-border/60 bg-white/70 px-4 py-4 space-y-5">
+                      {docTypeOptions.length ? (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Document type</p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {docTypeOptions.map((type) => {
+                              const label = type
+                                .replace(/_/g, ' ')
+                                .replace(/\b\w/g, (char) => char.toUpperCase());
+                              const checked = selectedDocTypes.has(type);
+                              return (
+                                <label key={type} className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleDocType(type)}
+                                    className="h-4 w-4 rounded border-border/60"
+                                  />
+                                  <span className={checked ? 'font-medium text-foreground' : undefined}>{label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Urgency</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {urgencyOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setUrgencyFilter(option.value)}
+                              className={cn(
+                                'flex flex-col gap-1 rounded-xl border px-3 py-2 text-left transition-colors',
+                                urgencyFilter === option.value
+                                  ? 'border-primary/50 bg-primary/10 text-primary'
+                                  : 'border-border/60 bg-white text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary',
+                              )}
+                              aria-pressed={urgencyFilter === option.value}
+                            >
+                              <span className="text-sm font-medium">{option.label}</span>
+                              <span className="text-xs text-muted-foreground/80">{option.helper}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -415,21 +702,51 @@ export function WorkQueuesPage() {
                 <div>
                   {viewMode === 'list' ? <QueueTableHeader /> : null}
                   {filteredDocuments.length === 0 ? (
-                    <div className="flex items-center justify-between gap-3 px-5 py-6 text-sm text-muted-foreground">
-                      <span>No documents in this queue yet.</span>
-                      <Button asChild variant="outline" size="sm">
-                        <Link to="/">Upload a document</Link>
-                      </Button>
+                    <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-6">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {hasActiveFilters ? 'No items match your filters.' : 'No documents in this queue yet.'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {hasActiveFilters
+                            ? 'Try adjusting the filters or sort order to widen the results.'
+                            : 'Upload a new document or pick a different team to start routing.'}
+                        </p>
+                      </div>
+                      {hasActiveFilters ? (
+                        <Button type="button" variant="outline" size="sm" onClick={handleClearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : (
+                        <Button asChild variant="outline" size="sm">
+                          <Link to="/">Upload a document</Link>
+                        </Button>
+                      )}
                     </div>
                   ) : viewMode === 'grid' ? (
                     <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
                       {filteredDocuments.map((doc) => (
-                        <QueueRow key={doc.document_id} document={doc} viewMode={viewMode} />
-                      ))}
-                    </div>
-                  ) : (
-                    filteredDocuments.map((doc, index) => (
-                      <QueueRow key={doc.document_id} document={doc} viewMode={viewMode} isFirst={index === 0} />
+                      <QueueRow
+                        key={doc.document_id}
+                        document={doc}
+                        viewMode={viewMode}
+                        isSelected={selectedDocumentId === doc.document_id}
+                        onSelect={handleSelectDocument}
+                        onRequestReassign={handleRequestReassign}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  filteredDocuments.map((doc, index) => (
+                      <QueueRow
+                        key={doc.document_id}
+                        document={doc}
+                        viewMode={viewMode}
+                        isFirst={index === 0}
+                        isSelected={selectedDocumentId === doc.document_id}
+                        onSelect={handleSelectDocument}
+                        onRequestReassign={handleRequestReassign}
+                      />
                     ))
                   )}
                 </div>
@@ -437,58 +754,221 @@ export function WorkQueuesPage() {
             </Card>
           </div>
 
-          <div className="flex flex-col gap-4">
-            <QueueInsightsCard role={selectedRole} stats={roleStats} />
-            <RoleLoadCard columns={columns} activeRole={selectedRole} />
-            <QueueQuickActionsCard />
-          </div>
+          {showDetailsPanel && selectedDocument ? (
+            <aside className="hidden flex-col gap-4 lg:flex">
+              <Card className="rounded-3xl border border-platinum-600 bg-white shadow-[0_18px_48px_rgba(112,99,244,0.08)]">
+                <CardContent className="flex flex-col gap-4 p-5 text-sm text-muted-foreground">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base font-semibold text-foreground">
+                      {selectedDocument.filename ?? selectedDocument.document_id}
+                    </CardTitle>
+                    <CardDescription>
+                      {(selectedDocument.doc_type ?? 'Uncategorised') + ' · Uploaded ' + formatDateTime(selectedDocument.uploaded_at)}
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em]">
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${detailStatusClass}`}>
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                      {selectedDocument ? inferStatus(selectedDocument) : ''}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${detailDueClass}`}>
+                      <Clock className="h-2.5 w-2.5" />
+                      {detailDueLabel}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Owner</p>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                        {detailOwnerInitials}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{detailOwnerName}</p>
+                        <p className="text-xs text-muted-foreground">{selectedDocument ? inferRole(selectedDocument) : ''}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Document ID</p>
+                    <p className="rounded-lg border border-dashed border-border/60 bg-white px-3 py-2 font-mono text-xs text-foreground">
+                      {selectedDocument.document_id}
+                    </p>
+                  </div>
+                  {selectedDocument ? (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Actions</p>
+                      {reassigningDocumentId === selectedDocument.document_id ? (
+                        <div className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-white/70 px-4 py-4">
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor={`reassign-role-${selectedDocument.document_id}`}
+                              className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
+                            >
+                              Assign to
+                            </Label>
+                            <select
+                              id={`reassign-role-${selectedDocument.document_id}`}
+                              className="w-full rounded-lg border border-border/60 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              value={pendingReassignRole}
+                              onChange={(event) => setPendingReassignRole(event.target.value as RoleKey)}
+                            >
+                              {ROLE_ORDER.map((role) => (
+                                <option key={role} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button type="button" variant="ghost" size="sm" onClick={handleCancelReassign}>
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={handleConfirmReassign}
+                              disabled={pendingReassignRole === selectedDocumentRole}
+                            >
+                              Confirm
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button type="button" variant="outline" size="sm" onClick={() => handleRequestReassign(selectedDocument)}>
+                          Reassign document
+                        </Button>
+                      )}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </aside>
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
 
-function QueueRow({ document, viewMode, isFirst = false }: { document: DocumentEntry; viewMode: 'list' | 'grid'; isFirst?: boolean }) {
+function QueueSummaryPill({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: SummaryTone }) {
+  const palette: Record<SummaryTone, string> = {
+    neutral: 'border-border/60 bg-muted text-foreground',
+    warning: 'border-amber-300 bg-amber-50 text-amber-900',
+    critical: 'border-destructive/40 bg-destructive/10 text-destructive',
+    success: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+  };
+  const labelPalette: Record<SummaryTone, string> = {
+    neutral: 'text-muted-foreground',
+    warning: 'text-amber-700',
+    critical: 'text-destructive',
+    success: 'text-emerald-700',
+  };
+
+  return (
+    <div
+      className={cn(
+        'flex min-w-[6.5rem] flex-col rounded-2xl border px-3 py-2 text-left shadow-sm transition-colors',
+        palette[tone],
+      )}
+    >
+      <span className={cn('text-[10px] font-semibold uppercase tracking-[0.14em]', labelPalette[tone])}>
+        {label}
+      </span>
+      <span className="text-base font-semibold tracking-tight">{value.toLocaleString()}</span>
+    </div>
+  );
+}
+
+const STATUS_BADGE_STYLES: Record<string, string> = {
+  completed: 'border-emerald-300 bg-emerald-50 text-emerald-700',
+  'ready for review': 'border-sky-300 bg-sky-50 text-sky-700',
+  processing: 'border-blue-300 bg-blue-50 text-blue-700',
+  'in progress': 'border-blue-300 bg-blue-50 text-blue-700',
+  pending: 'border-amber-300 bg-amber-50 text-amber-700',
+};
+
+function getStatusClass(status: string): string {
+  return STATUS_BADGE_STYLES[status.toLowerCase()] ?? 'border-slate-300 bg-slate-100 text-slate-700';
+}
+
+function getDueClass(dueDateRaw?: string | null): string {
+  if (!dueDateRaw) {
+    return 'border-slate-300 bg-slate-100 text-muted-foreground';
+  }
+  const dueTime = Date.parse(dueDateRaw);
+  if (Number.isNaN(dueTime)) {
+    return 'border-slate-300 bg-slate-100 text-muted-foreground';
+  }
+  const now = Date.now();
+  if (dueTime < now) {
+    return 'border-destructive/50 bg-destructive/10 text-destructive';
+  }
+  if (dueTime <= now + 48 * 60 * 60 * 1000) {
+    return 'border-amber-400 bg-amber-50 text-amber-700';
+  }
+  return 'border-sky-200 bg-sky-50 text-sky-700';
+}
+
+function getOwnerName(document: DocumentEntry, fallbackRole: string): string {
+  const metadata = (document.metadata as Record<string, unknown>) ?? {};
+  return (metadata.owner_name as string) || (metadata.owner as string) || fallbackRole;
+}
+
+function getOwnerInitials(document: DocumentEntry, fallbackRole: string): string {
+  const name = getOwnerName(document, fallbackRole);
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || fallbackRole.slice(0, 2).toUpperCase()
+  );
+}
+
+function QueueRow({
+  document,
+  viewMode,
+  isFirst = false,
+  isSelected = false,
+  onSelect,
+  onRequestReassign,
+}: {
+  document: DocumentEntry;
+  viewMode: 'list' | 'grid';
+  isFirst?: boolean;
+  isSelected?: boolean;
+  onSelect: (id: string) => void;
+  onRequestReassign: (doc: DocumentEntry) => void;
+}) {
   const status = inferStatus(document);
   const dueDateRaw = inferDueDate(document);
   const dueAt = dueDateRaw ? formatDateTime(dueDateRaw) : 'No SLA date';
   const role = inferRole(document);
   const uploadedAt = formatDateTime(document.uploaded_at);
   const isComplete = status.toLowerCase() === 'completed';
-  const dueTime = dueDateRaw ? Date.parse(dueDateRaw) : Number.NaN;
-  const now = Date.now();
-  const isOverdue = !Number.isNaN(dueTime) && dueTime < now;
-  const isDueSoon = !Number.isNaN(dueTime) && dueTime >= now && dueTime <= now + 48 * 60 * 60 * 1000;
-
-  const statusTone = status.toLowerCase();
-  const statusStyles: Record<string, string> = {
-    completed: 'border-emerald-300 bg-emerald-50 text-emerald-700',
-    'ready for review': 'border-sky-300 bg-sky-50 text-sky-700',
-    processing: 'border-blue-300 bg-blue-50 text-blue-700',
-    'in progress': 'border-blue-300 bg-blue-50 text-blue-700',
-    pending: 'border-amber-300 bg-amber-50 text-amber-700',
-  };
-  const statusClass = statusStyles[statusTone] ?? 'border-slate-300 bg-slate-100 text-slate-700';
-
-  const dueClass = isOverdue
-    ? 'border-destructive/50 bg-destructive/10 text-destructive'
-    : isDueSoon
-      ? 'border-amber-400 bg-amber-50 text-amber-700'
-      : dueDateRaw
-        ? 'border-sky-200 bg-sky-50 text-sky-700'
-        : 'border-slate-300 bg-slate-100 text-muted-foreground';
-
-  const ownerName = ((document.metadata as Record<string, unknown>)?.owner_name as string) ?? role;
-  const ownerInitials = ownerName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || role.slice(0, 2).toUpperCase();
+  const statusClass = getStatusClass(status);
+  const dueClass = getDueClass(dueDateRaw);
+  const ownerName = getOwnerName(document, role);
+  const ownerInitials = getOwnerInitials(document, role);
 
   if (viewMode === 'grid') {
     return (
-      <Card className="flex flex-col gap-3 border border-border/60 bg-white px-4 py-4 shadow-sm transition hover:border-primary/40">
+      <Card
+        onClick={() => onSelect(document.document_id)}
+        className={cn(
+          'flex cursor-pointer flex-col gap-3 border border-border/60 bg-white px-4 py-4 shadow-sm transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20',
+          isSelected && 'border-primary/40 ring-2 ring-primary/20',
+        )}
+        tabIndex={0}
+        role="button"
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onSelect(document.document_id);
+          }
+        }}
+      >
         <CardTitle className="text-sm font-semibold text-foreground">
           {document.filename ?? document.document_id}
         </CardTitle>
@@ -515,11 +995,22 @@ function QueueRow({ document, viewMode, isFirst = false }: { document: DocumentE
           </div>
         </div>
         <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onRequestReassign(document);
+            }}
+          >
             Reassign
           </Button>
           <Button asChild variant="default" size="sm" disabled={isComplete}>
-            <Link to={`/pipeline?document=${document.document_id}`} className="inline-flex items-center gap-1">
+            <Link
+              to={`/pipeline?document=${document.document_id}`}
+              className="inline-flex items-center gap-1 text-primary-foreground hover:text-primary-foreground"
+            >
               Open
               <MoveRight className="h-3.5 w-3.5" />
             </Link>
@@ -532,47 +1023,69 @@ function QueueRow({ document, viewMode, isFirst = false }: { document: DocumentE
   return (
     <div
       className={cn(
-        'grid gap-3 border-t border-border/60 px-4 py-4 sm:grid-cols-[minmax(0,2.4fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] sm:items-center',
+        'grid cursor-pointer gap-3 border-t border-border/60 px-4 py-4 hover:bg-primary/5 sm:grid-cols-[minmax(0,2.4fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] sm:items-center',
         isFirst && 'border-t-0',
+        isSelected && 'bg-primary/5 border-primary/40',
       )}
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(document.document_id)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(document.document_id);
+        }
+      }}
+      aria-pressed={isSelected}
     >
       <div className="col-span-full space-y-1 sm:col-span-1">
-          <CardTitle className="text-sm font-semibold text-foreground">
-            {document.filename ?? document.document_id}
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium">{document.doc_type ?? 'Uncategorised'}</span> · Uploaded {uploadedAt}
-          </p>
+        <CardTitle className="text-sm font-semibold text-foreground">
+          {document.filename ?? document.document_id}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium">{document.doc_type ?? 'Uncategorised'}</span> · Uploaded {uploadedAt}
+        </p>
       </div>
       <div className="col-span-full flex flex-wrap items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] sm:col-span-1">
-          <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${statusClass}`}>
-            <CheckCircle2 className="h-2.5 w-2.5" />
-            {status}
-          </span>
-          <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${dueClass}`}>
-            <Clock className="h-2.5 w-2.5" />
-            {dueAt}
-          </span>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${statusClass}`}>
+          <CheckCircle2 className="h-2.5 w-2.5" />
+          {status}
+        </span>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${dueClass}`}>
+          <Clock className="h-2.5 w-2.5" />
+          {dueAt}
+        </span>
       </div>
       <div className="col-span-full flex items-center gap-3 sm:col-span-1">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-            {ownerInitials}
-          </span>
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium text-foreground">{ownerName}</p>
-            <p className="text-xs text-muted-foreground">{role}</p>
-          </div>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+          {ownerInitials}
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium text-foreground">{ownerName}</p>
+          <p className="text-xs text-muted-foreground">{role}</p>
+        </div>
       </div>
       <div className="col-span-full flex items-center justify-end gap-2 sm:col-span-1">
-          <Button variant="outline" size="sm">
-            Reassign
-          </Button>
-          <Button asChild variant="default" size="sm" disabled={isComplete}>
-            <Link to={`/pipeline?document=${document.document_id}`} className="inline-flex items-center gap-1">
-              Open
-              <MoveRight className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onRequestReassign(document);
+          }}
+        >
+          Reassign
+        </Button>
+        <Button asChild variant="default" size="sm" disabled={isComplete}>
+          <Link
+            to={`/pipeline?document=${document.document_id}`}
+            className="inline-flex items-center gap-1 text-primary-foreground hover:text-primary-foreground"
+          >
+            Open
+            <MoveRight className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
       </div>
     </div>
   );
@@ -586,137 +1099,6 @@ function QueueTableHeader() {
       <span className="text-left">Owner</span>
       <span className="text-right">Actions</span>
     </div>
-  );
-}
-
-function QueueInsightsCard({ role, stats }: { role: RoleKey; stats: QueueRoleStats }) {
-  const metrics = [
-    {
-      label: 'In queue',
-      value: stats.total.toLocaleString(),
-      helper: `${stats.pending.toLocaleString()} active` ,
-      icon: FolderOpen,
-    },
-    {
-      label: 'Overdue',
-      value: stats.overdue.toLocaleString(),
-      helper: 'Past due date',
-      icon: AlertTriangle,
-    },
-    {
-      label: 'Due soon',
-      value: stats.dueSoon.toLocaleString(),
-      helper: 'Within 48 hours',
-      icon: Clock,
-    },
-    {
-      label: 'Completed',
-      value: stats.completed.toLocaleString(),
-      helper: 'Marked complete',
-      icon: CheckCircle2,
-    },
-  ];
-
-  return (
-    <Card className="shadow-none border border-platinum-600 bg-white">
-      <CardContent className="flex flex-col gap-4 p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-sm font-semibold text-foreground">Queue insights</CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">Snapshot for {role}</CardDescription>
-          </div>
-          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            {stats.total} items
-          </span>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {metrics.map(({ label, value, helper, icon: Icon }) => (
-            <div key={label} className="flex items-center gap-3 rounded-lg border border-border/60 bg-white px-3 py-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                <Icon className="h-4 w-4 text-primary" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-                <p className="text-sm font-semibold text-foreground">{value}</p>
-                <p className="text-xs text-muted-foreground">{helper}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function RoleLoadCard({ columns, activeRole }: { columns: QueueColumn[]; activeRole: RoleKey }) {
-  const total = columns.reduce((acc, column) => acc + column.documents.length, 0);
-
-  return (
-    <Card className="shadow-none border border-platinum-600 bg-white">
-      <CardContent className="flex flex-col gap-4 p-4">
-        <div>
-          <CardTitle className="text-sm font-semibold text-foreground">Workload by role</CardTitle>
-          <CardDescription className="text-xs text-muted-foreground">Distribution across routing teams.</CardDescription>
-        </div>
-        <div className="space-y-3">
-          {columns.map(({ role, documents }) => {
-            const count = documents.length;
-            const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-            return (
-              <div key={role} className="space-y-1">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className={role === activeRole ? 'font-semibold text-foreground' : undefined}>{role}</span>
-                  <span className="font-medium text-foreground">{count.toLocaleString()} ({percentage}%)</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#2f6690] to-[#81c3d7]"
-                    style={{ width: `${Math.min(percentage, 100)}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function QueueQuickActionsCard() {
-  const actions = [
-    {
-      title: 'Review overdue items',
-      description: 'Prioritise documents that have slipped past their SLA.',
-      icon: AlertTriangle,
-    },
-    {
-      title: 'Balance workload',
-      description: 'Reassign items from busy teams to free capacity.',
-      icon: Users,
-    },
-  ];
-
-  return (
-    <Card className="shadow-none border border-platinum-600 bg-white">
-      <CardContent className="flex flex-col gap-3 p-4">
-        <div>
-          <CardTitle className="text-sm font-semibold text-foreground">Queue actions</CardTitle>
-          <CardDescription className="text-xs text-muted-foreground">Suggested next steps for operations leads.</CardDescription>
-        </div>
-        <div className="space-y-3">
-          {actions.map(({ title, description, icon: Icon }) => (
-            <div key={title} className="flex items-start gap-3 rounded-lg border border-border/60 bg-white px-3 py-3">
-              <Icon className="mt-0.5 h-4 w-4 text-primary" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">{title}</p>
-                <p className="text-xs text-muted-foreground">{description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 

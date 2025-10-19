@@ -189,6 +189,30 @@ export function IntakePage() {
             />
           </div>
 
+          {metrics.sla_risk_message ? (
+            <div
+              className={cn(
+                'flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm shadow-sm',
+                metrics.sla_risk_count > 0
+                  ? 'border-destructive/40 bg-destructive/5 text-destructive'
+                  : 'border-sky-300/60 bg-sky-50 text-sky-800',
+              )}
+            >
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-foreground">SLA update</p>
+                <p className="text-sm">
+                  {metrics.sla_risk_message}
+                </p>
+              </div>
+              {metrics.sla_risk_count > 0 ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/work-queues">View queue</Link>
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
           <SummaryProgressCard completed={metrics.summarised_documents} total={metrics.total_documents} />
 
           <div className="grid gap-4 lg:grid-cols-2">

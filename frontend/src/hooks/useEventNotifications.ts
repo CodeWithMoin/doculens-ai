@@ -6,12 +6,58 @@ import { useNotificationStore } from '../stores/notificationStore';
 
 const HISTORY_LIMIT = 10;
 const POLL_INTERVAL_MS = 15_000;
+const STORAGE_KEY_QA = 'doculens_seen_qa_ids';
+const STORAGE_KEY_SEARCH = 'doculens_seen_search_ids';
+
+function loadSeenIds(storageKey: string): Set<string> {
+  if (typeof window === 'undefined') {
+    return new Set();
+  }
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return new Set();
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.filter((value): value is string => typeof value === 'string'));
+    }
+  } catch (error) {
+    console.warn(`Failed to load seen notification ids for ${storageKey}`, error);
+  }
+  return new Set();
+}
+
+function persistSeenIds(storageKey: string, ids: Set<string>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(Array.from(ids)));
+  } catch (error) {
+    console.warn(`Failed to persist seen notification ids for ${storageKey}`, error);
+  }
+}
 
 export function useEventNotifications() {
   const addNotification = useNotificationStore((state) => state.addNotification);
   const initializedRef = useRef(false);
-  const seenQaIds = useRef(new Set<string>());
-  const seenSearchIds = useRef(new Set<string>());
+  const seenQaIds = useRef<Set<string>>(loadSeenIds(STORAGE_KEY_QA));
+  const seenSearchIds = useRef<Set<string>>(loadSeenIds(STORAGE_KEY_SEARCH));
+
+  const rememberQaId = (id: string) => {
+    if (!seenQaIds.current.has(id)) {
+      seenQaIds.current.add(id);
+      persistSeenIds(STORAGE_KEY_QA, seenQaIds.current);
+    }
+  };
+
+  const rememberSearchId = (id: string) => {
+    if (!seenSearchIds.current.has(id)) {
+      seenSearchIds.current.add(id);
+      persistSeenIds(STORAGE_KEY_SEARCH, seenSearchIds.current);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -37,17 +83,19 @@ export function useEventNotifications() {
     const processQaHistory = (entries: QAHistoryEntry[]) => {
       entries.forEach((entry) => {
         if (!initializedRef.current) {
-          seenQaIds.current.add(entry.event_id);
+          rememberQaId(entry.event_id);
           return;
         }
 
         if (!seenQaIds.current.has(entry.event_id)) {
-          seenQaIds.current.add(entry.event_id);
+          rememberQaId(entry.event_id);
+          const occurredAt = Date.parse(entry.created_at);
           addNotification({
             title: 'QA answer ready',
             description: entry.answer ? `${entry.answer.slice(0, 80)}…` : entry.query,
             variant: 'success',
             href: '/qa',
+            timestamp: Number.isNaN(occurredAt) ? undefined : occurredAt,
           });
         }
       });
@@ -56,17 +104,19 @@ export function useEventNotifications() {
     const processSearchHistory = (entries: SearchHistoryEntry[]) => {
       entries.forEach((entry) => {
         if (!initializedRef.current) {
-          seenSearchIds.current.add(entry.event_id);
+          rememberSearchId(entry.event_id);
           return;
         }
 
         if (!seenSearchIds.current.has(entry.event_id)) {
-          seenSearchIds.current.add(entry.event_id);
+          rememberSearchId(entry.event_id);
+          const occurredAt = Date.parse(entry.created_at);
           addNotification({
             title: 'Search results updated',
             description: `${entry.query} (${entry.result_count} results)`,
             variant: 'info',
             href: '/qa',
+            timestamp: Number.isNaN(occurredAt) ? undefined : occurredAt,
           });
         }
       });
