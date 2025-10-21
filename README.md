@@ -104,7 +104,14 @@ Key variables:
 ### 2. Start the stack
 
 ```bash
+docker network create doculens_network  # safe to rerun; ensures required network exists
 ./scripts/dev_stack.sh         # boots Postgres, Redis, API, worker, UI
+```
+
+If Celery exits with a `libpq.5.dylib` import error on macOS, reinstall the bundled driver via:
+
+```bash
+.venv/bin/pip install --force-reinstall psycopg2-binary
 ```
 
 Backends start on `http://localhost:8080`, the console on `http://localhost:5173`.
@@ -197,4 +204,3 @@ curl -X POST "http://localhost:8080/events/documents/upload" \
 
 DocuLens AI is released under the CodeWithMoin license. Refer to
 [`LICENSE`](LICENSE) for terms.
-
