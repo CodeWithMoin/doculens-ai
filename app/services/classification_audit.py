@@ -129,7 +129,7 @@ def record_classification_result(
         user_id=user_id,
         classifier_version=classifier_version,
         notes=notes,
-        metadata=metadata_payload,
+        classification_metadata=metadata_payload,
     )
     session.add(history_entry)
     _update_document_metadata_from_classification(

@@ -96,3 +96,6 @@ app/alembic/versions/*
 
 # docs
 /docs/
+
+# Local ingestion uploads
+data/ingestion/

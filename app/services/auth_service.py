@@ -99,21 +99,45 @@ class AuthService:
         access_level: Optional[str] = None,
     ) -> User:
         existing = self.get_user_by_email(email=email)
-        if existing:
-            return existing
 
         role_key = role.lower()
         persona_value = persona.lower()
         if persona_value not in PERSONA_OPTIONS:
             persona_value = PERSONA_OPTIONS[0]
         derived_access = ROLE_DEFINITIONS.get(role_key, {}).get("access_level", "standard")
+        desired_access = access_level or derived_access
+
+        if existing:
+            updated = False
+            if not self.verify_password(password, existing.hashed_password):
+                existing.hashed_password = self.hash_password(password)
+                updated = True
+            if existing.full_name != full_name:
+                existing.full_name = full_name
+                updated = True
+            if existing.persona != persona_value:
+                existing.persona = persona_value
+                updated = True
+            if existing.role != role_key:
+                existing.role = role_key
+                updated = True
+            if existing.access_level != desired_access:
+                existing.access_level = desired_access
+                updated = True
+
+            if updated:
+                self.session.add(existing)
+                self.session.commit()
+                self.session.refresh(existing)
+            return existing
+
         user = User(
             email=email.lower(),
             hashed_password=self.hash_password(password),
             full_name=full_name,
             persona=persona_value,
             role=role_key,
-            access_level=access_level or derived_access,
+            access_level=desired_access,
         )
         self.session.add(user)
         self.session.commit()

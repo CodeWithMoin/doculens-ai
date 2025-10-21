@@ -990,7 +990,7 @@ def get_classification_history(document_id: str, session: Session = Depends(db_s
             classifier_version=row.classifier_version,
             user_id=str(row.user_id) if row.user_id else None,
             notes=row.notes,
-            metadata=row.metadata or {},
+            metadata=row.classification_metadata or {},
             created_at=row.created_at,
         )
         for row in rows
@@ -1039,7 +1039,7 @@ def override_classification(
         classifier_version=history.classifier_version,
         user_id=str(history.user_id) if history.user_id else None,
         notes=history.notes,
-        metadata=history.metadata or {},
+        metadata=history.classification_metadata or {},
         created_at=history.created_at,
     )
 
