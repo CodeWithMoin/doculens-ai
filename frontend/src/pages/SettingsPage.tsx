@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Eye, EyeOff, Globe, KeyRound, RefreshCw, ShieldCheck, UserRound } from 'lucide-react';
+import { Copy, Eye, EyeOff, Globe, KeyRound, RefreshCw, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -268,8 +268,21 @@ export function SettingsPage() {
                 const children = domain.children ?? [];
                 return (
                   <div key={domain.id ?? domain.name} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-foreground">{domain.name}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">{domain.name}</p>
+                        {domain.id ? (
+                          <button
+                            type="button"
+                            className="rounded-full border border-transparent p-1 text-muted-foreground transition hover:border-destructive/40 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+                            onClick={() => handleDeleteLabel(domain.id)}
+                            disabled={deleteLabelMutation.isPending}
+                            aria-label={`Delete ${domain.name}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
                       <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                         {children.length} label{children.length === 1 ? '' : 's'}
                       </span>

@@ -90,10 +90,6 @@ target/
 # Virtual environment
 .venv/
 
-# Alembic migrations
-app/alembic/versions/*
-!app/alembic/versions/.gitkeep
-
 # docs
 /docs/
 
