@@ -8,6 +8,9 @@ DocuLens is an open-source document intelligence system for teams that need more
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-API-009688)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/live_demo-open-2563EB)](https://doculens-ai.pages.dev/)
+
+**[Explore the live showcase →](https://doculens-ai.pages.dev/)** No sign-in required. The hosted workspace is read-only and uses clearly labelled synthetic data.
 
 ## Why it is technically interesting
 
