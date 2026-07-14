@@ -7,9 +7,12 @@ import { DEFAULT_PERSONAS } from './types';
 import { SettingsContext } from './context';
 
 const STORAGE_KEY = 'doculens.settings';
+const defaultApiBaseUrl =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://localhost:8080' : window.location.origin);
 
 const defaultSettings: AppSettings = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  apiBaseUrl: defaultApiBaseUrl,
   apiKey: '',
   chunkPreviewLimit: 25,
   summaryChunkLimit: 12,

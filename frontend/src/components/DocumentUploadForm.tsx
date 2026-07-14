@@ -266,7 +266,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
               value={docType}
               onChange={(event) => setDocType(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">Optional label used by downstream pipelines.</p>
+            <p className="text-xs text-muted-foreground">Optional type used to organize the document and guide review.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="metadata">Metadata (JSON)</Label>
@@ -280,7 +280,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
             {metadataError ? (
               <p className="text-xs text-destructive">{metadataError}</p>
             ) : (
-              <p className="text-xs text-muted-foreground">Attach structured hints for routing or extraction.</p>
+              <p className="text-xs text-muted-foreground">Attach optional structured context for processing and assignment.</p>
             )}
           </div>
         </div>
@@ -297,7 +297,7 @@ export function DocumentUploadForm({ onUploaded }: DocumentUploadFormProps) {
               {queue.map((item) => (
                 <li
                   key={item.id}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-white px-4 py-3"
+                  className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-card px-4 py-3"
                 >
                   <div className="flex flex-1 items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-surface-subtle text-muted-foreground">

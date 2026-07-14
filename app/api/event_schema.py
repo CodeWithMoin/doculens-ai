@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Optional, Union, Dict, Any, Literal
 
 """
@@ -9,45 +9,51 @@ HTTP requests. It specifies the expected structure and validation rules for
 events entering the system through the API endpoints.
 """
 
-class DocumentUploadEvent(BaseModel):
+class StrictEvent(BaseModel):
+    """Base contract that rejects misspelled or unsupported event fields."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class DocumentUploadEvent(StrictEvent):
     event_type: Literal["document_upload"]
     filename: str
     file_url: str
     doc_type: Optional[str] = None
-    metadata: Dict[str, Any]
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
-class DocumentClassificationEvent(BaseModel):
+class DocumentClassificationEvent(StrictEvent):
     event_type: Literal["document_classification"]
     document_id: str
     text: str
     metadata: Dict[str, Any]
 
-class InformationExtractionEvent(BaseModel):
+class InformationExtractionEvent(StrictEvent):
     event_type: Literal["information_extraction"]
     document_id: str
     doc_type: str
     text: str
-    fields: List[str]
+    fields: List[str] = Field(min_length=1, max_length=100)
 
-class SearchQueryEvent(BaseModel):
+class SearchQueryEvent(StrictEvent):
     event_type: Literal["search_query"]
     query: str
     filters: Optional[Dict[str, Any]] = None
-    limit: Optional[int] = None
+    limit: Optional[int] = Field(default=None, ge=1, le=100)
 
-class DocumentRoutingEvent(BaseModel):
+class DocumentRoutingEvent(StrictEvent):
     event_type: Literal["document_routing"]
     document_id: str
     target_department: str
     reason: str
 
 
-class DocumentSummaryEvent(BaseModel):
+class DocumentSummaryEvent(StrictEvent):
     event_type: Literal["document_summary"]
     document_id: Optional[str] = None
     filename: Optional[str] = None
     doc_type: Optional[str] = None
-    chunks_limit: Optional[int] = None
+    chunks_limit: Optional[int] = Field(default=None, ge=1, le=100)
 
     @model_validator(mode="after")
     def validate_identifier(self):
@@ -56,10 +62,10 @@ class DocumentSummaryEvent(BaseModel):
         return self
 
 
-class QAQueryEvent(BaseModel):
+class QAQueryEvent(StrictEvent):
     event_type: Literal["qa_query"]
     query: str
-    top_k: Optional[int] = None
+    top_k: Optional[int] = Field(default=None, ge=1, le=50)
     filters: Optional[Dict[str, Any]] = None
 
 # Union of all event types for the single endpoint

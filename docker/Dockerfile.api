@@ -6,21 +6,21 @@ RUN apt-get update \
     python3-dev \
     libpq-dev \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1
 
 ENV PYTHONUNBUFFERED=1
 
-WORKDIR /app
+WORKDIR /workspace
 
-ADD app/requirements.txt .
-RUN pip install -r requirements.txt
+COPY pyproject.toml README.md ./
+COPY app ./app
+RUN pip install --no-cache-dir .
 
-ADD app/ /app
-
-RUN chmod +x /app/start.sh
+RUN chmod +x /workspace/app/start.sh
 
 EXPOSE 8080
 
-CMD ["/app/start.sh"]
+CMD ["/workspace/app/start.sh"]

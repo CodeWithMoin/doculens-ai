@@ -21,7 +21,7 @@ class LLMProviderSettings(BaseSettings):
 class OpenAISettings(LLMProviderSettings):
     """Settings for OpenAI."""
 
-    api_key: str = os.getenv("OPENAI_API_KEY")
+    api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     default_model: str = "gpt-4o"
     embedding_model: str = "text-embedding-3-small"
 
@@ -29,7 +29,7 @@ class OpenAISettings(LLMProviderSettings):
 class AnthropicSettings(LLMProviderSettings):
     """Settings for Anthropic."""
 
-    api_key: str = os.getenv("ANTHROPIC_API_KEY")
+    api_key: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
     default_model: str = "claude-3-5-sonnet-20240620"
     max_tokens: int = 1024
 
@@ -45,7 +45,7 @@ class LlamaSettings(LLMProviderSettings):
 class OpenRouterSettings(LLMProviderSettings):
     """Settings for OpenRouter."""
 
-    api_key: str = os.getenv("OPEN_ROUTER_API_KEY")
+    api_key: Optional[str] = os.getenv("OPEN_ROUTER_API_KEY")
     default_model: str = "openai/gpt-4o-mini"
     base_url: str = "https://openrouter.ai/api/v1"
 

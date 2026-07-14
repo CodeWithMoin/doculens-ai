@@ -24,7 +24,7 @@ function log() {
 
 if [[ ! -d "${VENV_PATH}" ]]; then
   log "Python virtualenv not found at ${VENV_PATH}."
-  log "Create one with: python3 -m venv .venv && source .venv/bin/activate && pip install -r app/requirements.txt"
+  log "Create one with: python3 -m venv .venv && source .venv/bin/activate && pip install -e '.[dev]'"
   exit 1
 fi
 

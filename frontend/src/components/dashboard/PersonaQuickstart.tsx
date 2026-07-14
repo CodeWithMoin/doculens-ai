@@ -53,7 +53,7 @@ interface QuickstartActionCardProps {
 
 function QuickstartActionCard({ title, description, href }: QuickstartActionCardProps) {
   return (
-    <div className="flex h-full flex-col justify-between rounded-lg border border-border/70 bg-white p-4">
+    <div className="flex h-full flex-col justify-between rounded-lg border border-border/70 bg-card p-4">
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         <p className="text-xs text-muted-foreground">{description}</p>

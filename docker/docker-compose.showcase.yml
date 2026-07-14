@@ -1,0 +1,72 @@
+name: ${PROJECT_NAME:-doculens_showcase}
+
+services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    env_file:
+      - ../${DOCULENS_ENV_FILE:-.env.showcase}
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  caddy:
+    image: caddy:2.10-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:?Set CADDY_DOMAIN in .env.showcase}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile.showcase:/etc/caddy/Caddyfile:ro
+      - caddy_config:/config
+      - caddy_data:/data
+
+  database:
+    image: timescale/timescaledb-ha:pg16
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:?Set DATABASE_NAME in .env.showcase}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env.showcase}
+      POSTGRES_USER: ${DATABASE_USER:?Set DATABASE_USER in .env.showcase}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres_data:/home/postgres/pgdata
+
+volumes:
+  caddy_config:
+  caddy_data:
+  postgres_data:
+
+networks:
+  default:
+    name: "${PROJECT_NAME:-doculens_showcase}_network"

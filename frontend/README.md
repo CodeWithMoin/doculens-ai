@@ -1,73 +1,38 @@
-# React + TypeScript + Vite
+# DocuLens web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The DocuLens web application combines a public product experience with an authenticated document-intelligence workspace. It is built with React 19, TypeScript, Vite, TanStack Query, and a small token-driven component system.
 
-Currently, two official plugins are available:
+## Routes
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+| Route | Experience |
+| --- | --- |
+| `/` | Public product landing page |
+| `/login` | Workspace authentication |
+| `/app` | Document intake and workspace overview |
+| `/app/qa` | Citation-first document chat |
+| `/app/work-queues` | Review and processing queues |
+| `/app/pipeline` | Pipeline activity and diagnostics |
+| `/app/settings` | Workspace preferences |
 
-## React Compiler
+Protected routes redirect unauthenticated users to `/login`. Product routes are lazy-loaded so the public landing page does not pay the cost of the authenticated workspace bundle.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local development
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm ci
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Vite proxies `/api` to `http://localhost:8080` by default. Run the backend stack from the repository root with `make up`, or configure the target in `vite.config.ts`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run lint
+npm run build
+npm run preview
 ```
+
+## Design system
+
+Global semantic tokens, motion primitives, focus treatment, and dark-mode behavior live in `src/styles/globals.css`. Reusable primitives live in `src/components/ui`; product identity is isolated in `src/components/brand`. The interface uses native CSS motion with a `prefers-reduced-motion` fallback to keep the initial bundle small.
+
+The complete system rationale is documented in [`../docs/design-system.md`](../docs/design-system.md).

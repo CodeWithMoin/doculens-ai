@@ -16,6 +16,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!frontend/src/lib/
+!frontend/src/lib/**
 parts/
 sdist/
 var/
@@ -58,7 +60,7 @@ target/
 
 # DotEnv configuration
 .env
-.env.example
+!.env.example
 
 # Database
 *.db
@@ -89,9 +91,7 @@ target/
 
 # Virtual environment
 .venv/
-
-# docs
-/docs/
+.venv312/
 
 # Local ingestion uploads
 data/ingestion/

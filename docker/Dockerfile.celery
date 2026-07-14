@@ -19,16 +19,14 @@ ENV DOCLING_CACHE_DIR=${HOME}/.cache/docling
 RUN mkdir -p "${EASYOCR_HOME}" "${DOCLING_CACHE_DIR}" \
     && chown -R celery:celery /home/celery
 
-WORKDIR /app
+WORKDIR /workspace
 
-ADD app/requirements.txt .
+COPY pyproject.toml README.md ./
+COPY app ./app
+RUN pip install --no-cache-dir .
 
-RUN pip install -r requirements.txt watchdog
-
-ADD app/ /app
-
-RUN chown -R celery:celery /app
+RUN chown -R celery:celery /workspace
 
 USER celery
 
-CMD ["sh", "-c", "watchmedo auto-restart --directory=./ --pattern='*.py' --recursive -- celery -A config.celery_config worker --loglevel=info --concurrency=1"]
+CMD ["celery", "-A", "app.config.celery_config", "worker", "--loglevel=info", "--concurrency=2"]

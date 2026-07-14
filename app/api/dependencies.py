@@ -45,3 +45,19 @@ def require_api_key(request: Request) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key.",
         )
+
+
+def require_showcase_writable(request: Request) -> None:
+    """Reject state-changing workspace requests in public showcase mode.
+
+    This guard lives in the API rather than relying on disabled frontend controls,
+    so direct requests cannot mutate the seeded portfolio workspace.
+    """
+    settings = get_settings()
+    if not settings.showcase_read_only or request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="This public showcase is read-only.",
+    )
