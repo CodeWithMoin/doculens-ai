@@ -33,6 +33,20 @@ def test_get_runtime_config_reflects_settings(monkeypatch, client):
     assert payload["search_result_limit"] == 9
     assert payload["api_key_header"] == "X-Test-Key"
     assert "auth_required" in payload
+    assert payload["showcase_read_only"] is False
+
+
+def test_showcase_mode_rejects_mutations_but_keeps_reads_available(monkeypatch, client):
+    monkeypatch.setenv("DOCULENS_SHOWCASE_READ_ONLY", "true")
+    get_settings.cache_clear()
+
+    mutation = client.post("/events", json={"event_type": "qa_query", "query": "test"})
+    config = client.get("/events/config")
+
+    assert mutation.status_code == 403
+    assert mutation.json() == {"detail": "This public showcase is read-only."}
+    assert config.status_code == 200
+    assert config.json()["showcase_read_only"] is True
 
 
 def test_upload_document_persists_file_and_dispatches(monkeypatch, tmp_path, client):

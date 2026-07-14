@@ -1,3 +1,13 @@
 {
-  "extraPaths": ["./app"]
+  "include": [
+    "app/api/event_schema.py",
+    "app/config/settings.py",
+    "app/core/observability.py",
+    "app/evaluation",
+    "tests/test_retrieval_evaluation.py",
+    "tests/test_settings.py"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false
 }

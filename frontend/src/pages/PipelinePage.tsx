@@ -130,14 +130,14 @@ export function PipelinePage() {
       <div className="flex flex-col gap-6">
         <Card className="shadow-none">
           <CardHeader className="flex flex-col gap-1">
-            <CardTitle className="text-sm font-semibold text-foreground">Pipeline overview</CardTitle>
-            <CardDescription>Quick snapshot of throughput and bottlenecks.</CardDescription>
+            <CardTitle className="text-sm font-semibold text-foreground">Document status</CardTitle>
+            <CardDescription>What is ready, processing, or needs your attention.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <PipelineMetric label="Active in flight" value={pipelineSummary.inFlight} helper="Processing or enrichment underway" />
-            <PipelineMetric label="Ready to handoff" value={pipelineSummary.completed} helper="All stages completed" tone="success" />
-            <PipelineMetric label="Needs summary" value={pipelineSummary.needsSummary} helper="Awaiting AI summary or QA" tone="warning" />
-            <PipelineMetric label="Needs routing" value={pipelineSummary.needsRouting} helper="Assign owner or due date" tone="warning" />
+            <PipelineMetric label="Processing" value={pipelineSummary.inFlight} helper="Extraction or indexing underway" />
+            <PipelineMetric label="Ready" value={pipelineSummary.completed} helper="Available to search and ask" tone="success" />
+            <PipelineMetric label="Summary needed" value={pipelineSummary.needsSummary} helper="Waiting for a document summary" tone="warning" />
+            <PipelineMetric label="Owner needed" value={pipelineSummary.needsRouting} helper="Assign an owner or due date" tone="warning" />
           </CardContent>
           <CardContent className="border-t border-border/60 pt-4">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -151,8 +151,8 @@ export function PipelinePage() {
 
         <Card className="shadow-none">
           <CardHeader className="flex flex-col gap-1">
-            <CardTitle className="text-sm font-semibold text-foreground">Document inventory</CardTitle>
-            <CardDescription>Select an item to inspect its pipeline details.</CardDescription>
+            <CardTitle className="text-sm font-semibold text-foreground">All documents</CardTitle>
+            <CardDescription>Select a document to review its summary, classification, and sources.</CardDescription>
             <div className="flex gap-2 pt-2">
               <Button size="sm" variant={view === 'active' ? 'default' : 'outline'} onClick={() => setView('active')}>
                 Active ({activeDocuments.length})
@@ -182,7 +182,7 @@ export function PipelinePage() {
         ) : (
           <Card className="shadow-none border-dashed border-border/70 bg-surface-subtle">
             <CardContent className="py-16 text-center text-sm text-muted-foreground">
-              Select a document to inspect its pipeline journey.
+              Select a document to review its details.
             </CardContent>
           </Card>
         )}
@@ -203,9 +203,9 @@ function PipelineMetric({
   tone?: 'neutral' | 'success' | 'warning';
 }) {
   const palette: Record<'neutral' | 'success' | 'warning', string> = {
-    neutral: 'border-border/60 bg-white',
-    success: 'border-emerald-200 bg-emerald-50',
-    warning: 'border-amber-200 bg-amber-50',
+    neutral: 'border-border/60 bg-card',
+    success: 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/25 dark:bg-emerald-500/[0.08]',
+    warning: 'border-amber-200 bg-amber-50 dark:border-amber-500/25 dark:bg-amber-500/[0.08]',
   };
 
   return (

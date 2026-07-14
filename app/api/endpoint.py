@@ -2,17 +2,15 @@ import json
 import string
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
-from pathlib import Path
 import uuid
-from datetime import datetime
-
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.dependencies import db_session
 from app.api.event_schema import EventSchema
@@ -121,7 +119,7 @@ class LabelTreeNode(BaseModel):
     description: Optional[str] = None
     parent_id: Optional[str] = None
     workspace_id: Optional[str] = None
-    children: List["LabelTreeNode"] = []
+    children: List["LabelTreeNode"] = Field(default_factory=list)
 
 
 LabelTreeNode.model_rebuild()
@@ -295,6 +293,7 @@ def get_runtime_config() -> Dict[str, Any]:
         "search_preview_limit": settings.search_preview_limit,
         "chunk_preview_limit": settings.chunk_preview_limit,
         "auth_required": bool(settings.api_key),
+        "showcase_read_only": settings.showcase_read_only,
         "api_key_header": settings.api_key_header,
         "persona_options": PERSONA_OPTIONS,
         "role_definitions": ROLE_DEFINITIONS,
@@ -403,8 +402,6 @@ def get_dashboard_insights(
 
     now = datetime.now(timezone.utc)
     fourteen_days_ago = now - timedelta(days=13)
-    thirty_days_ago = now - timedelta(days=30)
-
     uploads_rows = session.execute(
         text(
             """
@@ -653,8 +650,7 @@ def list_events(
     session: Session = Depends(db_session),
 ):
     """Return the most recent events and their processing context."""
-    repository = GenericRepository(session=session, model=Event)
-    events = repository.get_latest(limit)
+    events = session.query(Event).order_by(Event.created_at.desc()).limit(limit).all()
     return [
         {
             "id": str(event.id),
@@ -1060,13 +1056,24 @@ async def upload_document(
     stored_filename = f"{uuid4().hex}_{original_name}"
     stored_path = ingestion_dir / stored_filename
 
+    bytes_written = 0
+    max_upload_bytes = get_settings().max_upload_bytes
     try:
         with stored_path.open("wb") as buffer:
             while True:
                 chunk = await file.read(1 << 20)
                 if not chunk:
                     break
+                bytes_written += len(chunk)
+                if bytes_written > max_upload_bytes:
+                    raise HTTPException(
+                        status_code=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"Upload exceeds the {max_upload_bytes}-byte limit.",
+                    )
                 buffer.write(chunk)
+    except Exception:
+        stored_path.unlink(missing_ok=True)
+        raise
     finally:
         await file.close()
 
@@ -1107,6 +1114,7 @@ async def upload_document(
         "task_id": task_id,
         "original_filename": original_name,
         "stored_path": str(stored_path),
+        "size_bytes": bytes_written,
     }
 
 

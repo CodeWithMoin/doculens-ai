@@ -10,6 +10,7 @@ import type {
   DocumentClassificationResponse,
   DocumentEntry,
   EventResponse,
+  EventEntry,
   QAHistoryEntry,
   LabelRequestPayload,
   LabelResponse,
@@ -29,7 +30,9 @@ interface ApiConfig {
   accessToken?: string;
 }
 
-const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const defaultBaseUrl =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://localhost:8080' : window.location.origin);
 const defaultApiKeyHeader = 'X-API-Key';
 
 let apiConfig: ApiConfig = {
@@ -107,6 +110,13 @@ export async function fetchDocuments(limit = 20): Promise<DocumentEntry[]> {
     headers: buildHeaders(),
   });
   return handleResponse<DocumentEntry[]>(response);
+}
+
+export async function fetchEvents(limit = 20): Promise<EventEntry[]> {
+  const response = await fetch(resolveUrl('/events', { limit }), {
+    headers: buildHeaders(),
+  });
+  return handleResponse<EventEntry[]>(response);
 }
 
 export async function archiveDocument(documentId: string, reason?: string): Promise<DocumentLifecycleResponse> {

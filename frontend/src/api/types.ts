@@ -80,6 +80,14 @@ export interface EventResponse {
   event_type?: string;
 }
 
+export interface EventEntry {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  data: Record<string, unknown>;
+  task_context?: Record<string, unknown> | null;
+}
+
 export interface UploadResponse extends EventResponse {
   original_filename: string;
   stored_path: string;
@@ -202,6 +210,7 @@ export interface RuntimeConfig {
   search_preview_limit: number;
   chunk_preview_limit: number;
   auth_required: boolean;
+  showcase_read_only: boolean;
   api_key_header: string;
   persona_options?: string[];
   role_definitions?: Record<string, RoleDefinition>;

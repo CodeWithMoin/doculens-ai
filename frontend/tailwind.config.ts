@@ -9,6 +9,8 @@ const config: Config = {
       colors: {
         background: 'hsl(var(--docu-background))',
         foreground: 'hsl(var(--docu-foreground))',
+        'surface-muted': 'hsl(var(--docu-surface-muted) / <alpha-value>)',
+        'surface-subtle': 'hsl(var(--docu-surface-subtle) / <alpha-value>)',
         lapis: {
           DEFAULT: '#2f6690',
           100: '#09141c',

@@ -46,6 +46,13 @@ def get_celery_config():
         "result_serializer": "json",
         "enable_utc": True,
         "broker_connection_retry_on_startup": True,
+        "task_acks_late": True,
+        "task_reject_on_worker_lost": True,
+        "task_track_started": True,
+        "task_time_limit": 600,
+        "task_soft_time_limit": 540,
+        "worker_prefetch_multiplier": 1,
+        "result_expires": 86400,
     }
 
 

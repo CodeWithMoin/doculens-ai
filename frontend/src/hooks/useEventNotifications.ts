@@ -94,7 +94,7 @@ export function useEventNotifications() {
             title: 'QA answer ready',
             description: entry.answer ? `${entry.answer.slice(0, 80)}…` : entry.query,
             variant: 'success',
-            href: '/qa',
+            href: '/app/qa',
             timestamp: Number.isNaN(occurredAt) ? undefined : occurredAt,
           });
         }
@@ -115,7 +115,7 @@ export function useEventNotifications() {
             title: 'Search results updated',
             description: `${entry.query} (${entry.result_count} results)`,
             variant: 'info',
-            href: '/qa',
+            href: '/app/qa',
             timestamp: Number.isNaN(occurredAt) ? undefined : occurredAt,
           });
         }

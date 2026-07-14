@@ -3,12 +3,14 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 import { useAuth } from './useAuth';
+import { useSettings } from '../settings/useSettings';
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
+  const { serverConfig, isLoaded: isSettingsLoaded } = useSettings();
   const location = useLocation();
 
-  if (isLoading) {
+  if (isLoading || !isSettingsLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
         <div className="flex items-center gap-2 text-sm font-medium">
@@ -17,6 +19,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  if (serverConfig?.showcase_read_only) {
+    return <>{children}</>;
   }
 
   if (!user) {

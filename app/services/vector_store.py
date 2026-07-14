@@ -1,6 +1,8 @@
 import logging
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
@@ -25,6 +27,9 @@ and supports both exact and approximate nearest neighbor search through Streamin
 class VectorStore:
     """A class for managing vector operations and database interactions."""
 
+    _embedding_cache: "OrderedDict[tuple[str, str], List[float]]" = OrderedDict()
+    _cache_lock = Lock()
+
     def __init__(self, local: bool = False):
         """
         Initialize the VectorStore with settings, OpenAI client, and Timescale Vector client.
@@ -33,12 +38,17 @@ class VectorStore:
             local (bool): If True, overrides .env to use localhost DB for running outside Docker.
         """
         self.settings = get_settings()
-        self.openai_client = OpenAI(api_key=self.settings.llm.openai.api_key)
+        self.openai_client = OpenAI(
+            api_key=self.settings.llm.openai.api_key,
+            timeout=self.settings.provider_timeout_seconds,
+            max_retries=self.settings.llm.openai.max_retries,
+        )
         self.embedding_model = self.settings.llm.openai.embedding_model
         self.vector_settings = self.settings.database.vector_store
-        self.settings.database.local = local
+        database_url = self.settings.database.service_url_for(local=local)
+        self.database_url = database_url
         self.vec_client = client.Sync(
-            self.settings.database.service_url,
+            database_url,
             self.vector_settings.table_name,
             self.vector_settings.embedding_dimensions,
             time_partition_interval=self.vector_settings.time_partition_interval,
@@ -52,7 +62,7 @@ class VectorStore:
         ON {self.vector_settings.table_name} USING gin(to_tsvector('english', contents));
         """
         try:
-            with psycopg2.connect(self.settings.database.service_url) as conn:
+            with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor() as cur:
                     cur.execute(create_index_sql)
                     conn.commit()
@@ -70,16 +80,39 @@ class VectorStore:
         Returns:
             A list of floats representing the embedding.
         """
-        text = text.replace("\n", " ")
-        embedding = (
-            self.openai_client.embeddings.create(
-                input=[text],
-                model=self.embedding_model,
+        return self.embed_texts([text])[0]
+
+    def embed_texts(self, texts: List[str], model: Optional[str] = None) -> List[List[float]]:
+        """Embed texts in bounded batches with a small process-local LRU cache."""
+        selected_model = model or self.embedding_model
+        results: List[Optional[List[float]]] = [None] * len(texts)
+        missing: List[tuple[int, str, tuple[str, str]]] = []
+        with self._cache_lock:
+            for index, text in enumerate(texts):
+                key = (selected_model, text.replace("\n", " "))
+                cached = self._embedding_cache.get(key)
+                if cached is None:
+                    missing.append((index, key[1], key))
+                else:
+                    self._embedding_cache.move_to_end(key)
+                    results[index] = cached
+
+        batch_size = self.settings.embedding_batch_size
+        for offset in range(0, len(missing), batch_size):
+            batch = missing[offset : offset + batch_size]
+            response = self.openai_client.embeddings.create(
+                input=[text for _, text, _ in batch], model=selected_model
             )
-            .data[0]
-            .embedding
-        )
-        return embedding
+            for (index, _, key), item in zip(batch, response.data):
+                vector = item.embedding
+                results[index] = vector
+                if self.settings.embedding_cache_size:
+                    with self._cache_lock:
+                        self._embedding_cache[key] = vector
+                        self._embedding_cache.move_to_end(key)
+                        while len(self._embedding_cache) > self.settings.embedding_cache_size:
+                            self._embedding_cache.popitem(last=False)
+        return [vector for vector in results if vector is not None]
 
     def create_tables(self) -> None:
         """Create the necessary tablesin the database"""
@@ -252,7 +285,7 @@ class VectorStore:
         """
         params.append(limit)
 
-        with psycopg2.connect(self.settings.database.service_url) as conn:
+        with psycopg2.connect(self.database_url) as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(query, params)
                 rows = cur.fetchall()
@@ -341,7 +374,7 @@ class VectorStore:
         LIMIT %s
         """
 
-        with psycopg2.connect(self.settings.database.service_url) as conn:
+        with psycopg2.connect(self.database_url) as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(search_sql, (query, limit))
                 results = cur.fetchall()

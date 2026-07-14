@@ -38,7 +38,8 @@ interface DocumentDetailProps {
 }
 
 export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps) {
-  const { settings } = useSettings();
+  const { settings, serverConfig } = useSettings();
+  const isShowcaseReadOnly = Boolean(serverConfig?.showcase_read_only);
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [banner, setBanner] = useState<{ type: 'info' | 'error'; text: string } | null>(null);
@@ -404,7 +405,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
       <Card className="shadow-none border-dashed border-border/70 bg-surface-subtle">
         <CardContent className="flex h-full flex-col items-center justify-center gap-3 py-16 text-center text-muted-foreground">
           <FileText className="h-8 w-8" />
-          <p>Select a document to view intelligence and QA tools.</p>
+          <p>Select a document to review its summary, sources, and actions.</p>
         </CardContent>
       </Card>
     );
@@ -455,32 +456,36 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
             {document.summary?.doc_type ? (
               <dl className="flex flex-wrap gap-4 text-xs text-muted-foreground/90">
                 <div>
-                  <dt className="font-medium text-foreground/80">Summary tag</dt>
+                  <dt className="font-medium text-foreground/80">Document type</dt>
                   <dd>{document.summary.doc_type}</dd>
                 </div>
               </dl>
             ) : null}
             <div className="flex flex-wrap items-center gap-2 sm:justify-start">
               <Button
-                onClick={reissueSummary}
-                disabled={isSubmitting || isArchived || isDeleted}
-                variant="accent"
-                className="gap-2"
-              >
-                <Brain className={cn('h-4 w-4', isSubmitting ? 'animate-spin' : '')} />
-                Summarise again
-              </Button>
-              <Button
-                onClick={() => document && navigate(`/qa?document=${document.document_id}`)}
-                variant="outline"
+                onClick={() => document && navigate(`/app/qa?document=${document.document_id}`)}
+                variant={isShowcaseReadOnly ? 'accent' : 'outline'}
+                size="sm"
                 className="gap-2 text-sm"
               >
                 <MessageSquare className="h-4 w-4" />
-                Open in QA Studio
+                Ask DocuLens
+              </Button>
+              {!isShowcaseReadOnly ? <>
+              <Button
+                onClick={reissueSummary}
+                disabled={isSubmitting || isArchived || isDeleted}
+                variant="accent"
+                size="sm"
+                className="gap-2"
+              >
+                <Brain className={cn('h-4 w-4', isSubmitting ? 'animate-spin' : '')} />
+                Refresh summary
               </Button>
               <Button
                 onClick={runClassification}
                 variant="outline"
+                size="sm"
                 className="text-sm"
                 disabled={isClassifying || (labelsData && candidateLabels.length === 0) || isArchived || isDeleted}
               >
@@ -490,13 +495,14 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
                     Classifying…
                   </span>
                 ) : (
-                  'Classify document'
+                  'Classify'
                 )}
               </Button>
               {isArchived ? (
                 <Button
                   onClick={handleRestore}
                   variant="outline"
+                  size="sm"
                   className="text-sm"
                   disabled={isRestoring}
                 >
@@ -516,6 +522,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
                 <Button
                   onClick={handleArchiveClick}
                   variant="outline"
+                  size="sm"
                   className="text-sm"
                   disabled={isArchiving || isDeleted}
                 >
@@ -535,6 +542,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
               <Button
                 onClick={handleDeleteClick}
                 variant="destructive"
+                size="sm"
                 className="text-sm"
                 disabled={isDeleting || isDeleted}
               >
@@ -550,6 +558,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
                   </span>
                 )}
               </Button>
+              </> : <Badge variant="outline" className="rounded-full text-[9px] uppercase tracking-[0.12em]">Curated result</Badge>}
             </div>
           </div>
         </CardHeader>
@@ -557,7 +566,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
 
       {pendingAction && confirmConfig ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
               <div className="space-y-2">
@@ -633,7 +642,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
           <CardHeader className="flex flex-col gap-1">
             <CardTitle className="text-sm font-semibold text-foreground">Document classification</CardTitle>
             <CardDescription>
-              {displaySource ? `Latest label generated by ${displaySource}.` : 'Predicted label for this document.'}
+              {displaySource ? `Latest label generated by ${displaySource.toLowerCase() === 'ai' ? 'AI' : displaySource}.` : 'Predicted label for this document.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -674,7 +683,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
               </div>
             ) : null}
 
-            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-4">
+            {!isShowcaseReadOnly ? <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Override classification</p>
               {candidateLabels.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -729,7 +738,7 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
                   {isOverriding ? 'Saving…' : 'Save override'}
                 </Button>
               </div>
-            </div>
+            </div> : null}
 
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Classification history</p>
@@ -785,10 +794,10 @@ export function DocumentDetail({ document, onEventQueued }: DocumentDetailProps)
             </CardHeader>
             <CardContent className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">Summaries help reviewers get context before diving into stage progress.</span>
-              <Button onClick={reissueSummary} disabled={isSubmitting || isArchived || isDeleted} className="gap-2">
+              {!isShowcaseReadOnly ? <Button onClick={reissueSummary} disabled={isSubmitting || isArchived || isDeleted} className="gap-2">
                 <Brain className={cn('h-4 w-4', isSubmitting ? 'animate-spin' : '')} />
                 Generate summary
-              </Button>
+              </Button> : <Badge variant="outline" className="rounded-full text-[9px] uppercase tracking-[0.12em]">Curated result</Badge>}
             </CardContent>
           </Card>
         </>
@@ -803,15 +812,15 @@ function ProcessingTimeline({ stages }: { stages: ReturnType<typeof derivePipeli
     <Card className="shadow-none">
       <CardHeader className="flex flex-col gap-1">
         <CardTitle className="text-sm font-semibold text-foreground">Processing status</CardTitle>
-        <CardDescription>Where this document is in the digitisation journey.</CardDescription>
+        <CardDescription>Extraction, indexing, summary, and assignment progress.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {stages.map((stage) => (
-          <div key={stage.id} className="flex items-center gap-3 rounded-lg border border-platinum-600 bg-white px-3 py-2 text-sm">
+          <div key={stage.id} className="flex items-center gap-3 rounded-lg border border-border bg-surface-subtle/60 px-3 py-2 text-sm">
             {stage.state === 'complete' ? (
-              <CheckCircle2 className="h-4 w-4 text-sky-blue-500" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             ) : stage.state === 'active' ? (
-              <Loader2 className="h-4 w-4 animate-spin text-lapis-500" />
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
             ) : (
               <CircleDashed className="h-4 w-4 text-muted-foreground" />
             )}

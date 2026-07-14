@@ -24,7 +24,7 @@ export const PERSONA_CONFIG: Record<SettingsPersona, PersonaConfig> = {
       {
         title: 'QA the latest batch',
         description: 'Run targeted QA across priority documents with citations.',
-        href: '/qa',
+        href: '/app/qa',
       },
       {
         title: 'Approve summaries',
@@ -41,17 +41,17 @@ export const PERSONA_CONFIG: Record<SettingsPersona, PersonaConfig> = {
       {
         title: 'Scan today’s KPIs',
         description: 'Check dashboards for SLA risks and backlog growth.',
-        href: '/work-queues',
+        href: '/app/work-queues',
       },
       {
         title: 'Coach reviewers',
         description: 'Spot coaching opportunities by filtering documents awaiting approval.',
-        href: '/pipeline',
+        href: '/app/pipeline',
       },
       {
         title: 'Broadcast status',
         description: 'Share quality and savings snapshots upstream.',
-        href: '/settings',
+        href: '/app/settings',
       },
     ],
   },
@@ -63,7 +63,7 @@ export const PERSONA_CONFIG: Record<SettingsPersona, PersonaConfig> = {
       {
         title: 'Triage review queue',
         description: 'Filter for documents awaiting human approval and add feedback.',
-        href: '/work-queues',
+        href: '/app/work-queues',
       },
       {
         title: 'Escalate edge cases',
@@ -85,17 +85,17 @@ export const PERSONA_CONFIG: Record<SettingsPersona, PersonaConfig> = {
       {
         title: 'Sync API credentials',
         description: 'Confirm API key headers in Settings match environment config.',
-        href: '/settings',
+        href: '/app/settings',
       },
       {
         title: 'Monitor job feed',
         description: 'Review QA/search results for anomalies or retriable failures.',
-        href: '/qa',
+        href: '/app/qa',
       },
       {
         title: 'Inspect embedding health',
         description: 'Check pipeline diagnostics for drift or processing gaps.',
-        href: '/settings',
+        href: '/app/settings',
       },
     ],
   },
@@ -117,7 +117,7 @@ export const PERSONA_CONFIG: Record<SettingsPersona, PersonaConfig> = {
       {
         title: 'Align roadmap',
         description: 'Spot gaps in coverage and align teams on next investments.',
-        href: '/settings',
+        href: '/app/settings',
       },
     ],
   },

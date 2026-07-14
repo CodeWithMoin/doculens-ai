@@ -26,7 +26,7 @@ class DatabaseConfig(BaseSettings):
     port: str = os.getenv("DATABASE_PORT", "5432")
     name: str = os.getenv("DATABASE_NAME", "doculens")
     pg_user: str = os.getenv("DATABASE_USER", "postgres")
-    password: str = os.getenv("DATABASE_PASSWORD")
+    password: str = os.getenv("DATABASE_PASSWORD", "")
     local: bool = False
 
     @property
@@ -35,5 +35,10 @@ class DatabaseConfig(BaseSettings):
         if self.local:
             return f"postgres://{self.pg_user}:{self.password}@localhost:{self.port}/{self.name}"
         return f"postgres://{self.pg_user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+    def service_url_for(self, *, local: bool = False) -> str:
+        """Build a URL without mutating the cached settings singleton."""
+        host = "localhost" if local else self.host
+        return f"postgres://{self.pg_user}:{self.password}@{host}:{self.port}/{self.name}"
 
     vector_store: VectorStoreConfig = VectorStoreConfig()

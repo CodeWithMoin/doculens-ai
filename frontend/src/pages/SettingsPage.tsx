@@ -27,6 +27,7 @@ export function SettingsPage() {
     roleDefinitions,
   } = useSettings();
   const addNotification = useNotificationStore((state) => state.addNotification);
+  const isShowcaseReadOnly = Boolean(serverConfig?.showcase_read_only);
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [isDomainLabel, setIsDomainLabel] = useState(false);
@@ -271,7 +272,7 @@ export function SettingsPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold text-foreground">{domain.name}</p>
-                        {domain.id ? (
+                        {domain.id && !isShowcaseReadOnly ? (
                           <button
                             type="button"
                             className="rounded-full border border-transparent p-1 text-muted-foreground transition hover:border-destructive/40 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
@@ -291,7 +292,7 @@ export function SettingsPage() {
                       {children.map((label) => (
                         <Badge key={label.id ?? label.name} variant="outline" className="flex items-center gap-2 px-2 py-1 text-xs">
                           {label.name}
-                          {deleteLabelMutation.isPending ? null : (
+                          {deleteLabelMutation.isPending || isShowcaseReadOnly ? null : (
                             <button
                               type="button"
                               className="text-muted-foreground transition hover:text-destructive"
@@ -315,7 +316,7 @@ export function SettingsPage() {
             <p>No labels defined yet. Add your first label below.</p>
           )}
 
-          <form onSubmit={handleAddLabel} className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+          {!isShowcaseReadOnly ? <form onSubmit={handleAddLabel} className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Add label</p>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),minmax(0,220px)]">
               <Input
@@ -360,7 +361,7 @@ export function SettingsPage() {
                 {createLabelMutation.isPending ? 'Saving…' : 'Add label'}
               </Button>
             </div>
-          </form>
+          </form> : <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-xs"><span>This taxonomy is part of the curated portfolio dataset.</span><Badge variant="outline" className="shrink-0 rounded-full text-[9px] uppercase tracking-[0.12em]">Read only</Badge></div>}
         </CardContent>
       </Card>
 
@@ -405,9 +406,9 @@ export function SettingsPage() {
           </div>
           <div className="space-y-2">
             <p className="font-semibold text-foreground">Webhook endpoints</p>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               Configure POST callbacks for job completion under <Badge variant="outline">Settings &gt; Webhooks</Badge> (coming soon).
-            </p>
+            </div>
           </div>
         </CardContent>
       </Card>

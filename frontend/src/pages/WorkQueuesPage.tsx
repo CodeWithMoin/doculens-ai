@@ -175,7 +175,7 @@ export function WorkQueuesPage() {
     return columns.find((column) => column.role === selectedRole) ?? columns[0];
   }, [columns, selectedRole]);
 
-  const selectedDocuments = selectedColumn?.documents ?? [];
+  const selectedDocuments = useMemo(() => selectedColumn?.documents ?? [], [selectedColumn]);
 
   const roleStats: QueueRoleStats = useMemo(() => {
     const now = Date.now();
@@ -493,7 +493,7 @@ export function WorkQueuesPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 rounded-3xl border border-border/60 bg-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-3xl border border-border/60 bg-card px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               {selectedRole} queue snapshot
@@ -554,7 +554,7 @@ export function WorkQueuesPage() {
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-white p-1">
+            <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-card p-1">
               <Button
                 type="button"
                 size="icon"
@@ -576,7 +576,7 @@ export function WorkQueuesPage() {
                 <LayoutGrid className="h-4 w-4" />
               </Button>
             </div>
-            <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-white p-1">
+            <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-card p-1">
               <Button
                 type="button"
                 size="icon"
@@ -594,7 +594,7 @@ export function WorkQueuesPage() {
 
         <div className={cn('grid gap-6', showDetailsPanel ? 'lg:grid-cols-[minmax(0,1.45fr),minmax(0,0.8fr)]' : '')}>
           <div className="flex flex-col gap-6">
-            <Card className="overflow-hidden rounded-3xl border border-platinum-600 bg-white shadow-[0_18px_48px_rgba(112,99,244,0.08)]">
+            <Card className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-[0_18px_48px_rgba(10,18,35,0.08)]">
               <div className="flex flex-col">
                 <div className="flex flex-col gap-4 border-b border-border/60 px-5 py-5">
                   <div className="flex flex-wrap items-center gap-2">
@@ -616,7 +616,7 @@ export function WorkQueuesPage() {
                     ))}
                   </div>
                   <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-2">
-                    <div className="group flex flex-1 items-center gap-2 rounded-full border border-border/60 bg-white/90 px-4 py-2 shadow-sm focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20">
+                    <div className="group flex flex-1 items-center gap-2 rounded-full border border-border/60 bg-background/80 px-4 py-2 shadow-sm focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20">
                       <Filter className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                       <Input
                         value={searchValue}
@@ -647,7 +647,7 @@ export function WorkQueuesPage() {
                     ))}
                   </div>
                   {isFilterPanelOpen ? (
-                    <div className="rounded-2xl border border-dashed border-border/60 bg-white/70 px-4 py-4 space-y-5">
+                    <div className="space-y-5 rounded-2xl border border-dashed border-border/60 bg-surface-subtle/60 px-4 py-4">
                       {docTypeOptions.length ? (
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Document type</p>
@@ -684,7 +684,7 @@ export function WorkQueuesPage() {
                                 'flex flex-col gap-1 rounded-xl border px-3 py-2 text-left transition-colors',
                                 urgencyFilter === option.value
                                   ? 'border-primary/50 bg-primary/10 text-primary'
-                                  : 'border-border/60 bg-white text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary',
+                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary',
                               )}
                               aria-pressed={urgencyFilter === option.value}
                             >
@@ -719,7 +719,7 @@ export function WorkQueuesPage() {
                         </Button>
                       ) : (
                         <Button asChild variant="outline" size="sm">
-                          <Link to="/">Upload a document</Link>
+                          <Link to="/app">Upload a document</Link>
                         </Button>
                       )}
                     </div>
@@ -756,7 +756,7 @@ export function WorkQueuesPage() {
 
           {showDetailsPanel && selectedDocument ? (
             <aside className="hidden flex-col gap-4 lg:flex">
-              <Card className="rounded-3xl border border-platinum-600 bg-white shadow-[0_18px_48px_rgba(112,99,244,0.08)]">
+              <Card className="rounded-3xl border border-border/70 bg-card shadow-[0_18px_48px_rgba(10,18,35,0.08)]">
                 <CardContent className="flex flex-col gap-4 p-5 text-sm text-muted-foreground">
                   <div className="space-y-1">
                     <CardTitle className="text-base font-semibold text-foreground">
@@ -790,7 +790,7 @@ export function WorkQueuesPage() {
                   </div>
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Document ID</p>
-                    <p className="rounded-lg border border-dashed border-border/60 bg-white px-3 py-2 font-mono text-xs text-foreground">
+                    <p className="rounded-lg border border-dashed border-border/60 bg-surface-subtle px-3 py-2 font-mono text-xs text-foreground">
                       {selectedDocument.document_id}
                     </p>
                   </div>
@@ -798,7 +798,7 @@ export function WorkQueuesPage() {
                     <div className="space-y-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Actions</p>
                       {reassigningDocumentId === selectedDocument.document_id ? (
-                        <div className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-white/70 px-4 py-4">
+                        <div className="space-y-3 rounded-2xl border border-dashed border-border/60 bg-surface-subtle/60 px-4 py-4">
                           <div className="space-y-2">
                             <Label
                               htmlFor={`reassign-role-${selectedDocument.document_id}`}
@@ -808,7 +808,7 @@ export function WorkQueuesPage() {
                             </Label>
                             <select
                               id={`reassign-role-${selectedDocument.document_id}`}
-                              className="w-full rounded-lg border border-border/60 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
                               value={pendingReassignRole}
                               onChange={(event) => setPendingReassignRole(event.target.value as RoleKey)}
                             >
@@ -853,15 +853,15 @@ export function WorkQueuesPage() {
 function QueueSummaryPill({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: SummaryTone }) {
   const palette: Record<SummaryTone, string> = {
     neutral: 'border-border/60 bg-muted text-foreground',
-    warning: 'border-amber-300 bg-amber-50 text-amber-900',
+    warning: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200',
     critical: 'border-destructive/40 bg-destructive/10 text-destructive',
-    success: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+    success: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200',
   };
   const labelPalette: Record<SummaryTone, string> = {
     neutral: 'text-muted-foreground',
-    warning: 'text-amber-700',
+    warning: 'text-amber-700 dark:text-amber-300',
     critical: 'text-destructive',
-    success: 'text-emerald-700',
+    success: 'text-emerald-700 dark:text-emerald-300',
   };
 
   return (
@@ -880,33 +880,33 @@ function QueueSummaryPill({ label, value, tone = 'neutral' }: { label: string; v
 }
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
-  completed: 'border-emerald-300 bg-emerald-50 text-emerald-700',
-  'ready for review': 'border-sky-300 bg-sky-50 text-sky-700',
-  processing: 'border-blue-300 bg-blue-50 text-blue-700',
-  'in progress': 'border-blue-300 bg-blue-50 text-blue-700',
-  pending: 'border-amber-300 bg-amber-50 text-amber-700',
+  completed: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
+  'ready for review': 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300',
+  processing: 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300',
+  'in progress': 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300',
+  pending: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
 };
 
 function getStatusClass(status: string): string {
-  return STATUS_BADGE_STYLES[status.toLowerCase()] ?? 'border-slate-300 bg-slate-100 text-slate-700';
+  return STATUS_BADGE_STYLES[status.toLowerCase()] ?? 'border-border bg-muted text-muted-foreground';
 }
 
 function getDueClass(dueDateRaw?: string | null): string {
   if (!dueDateRaw) {
-    return 'border-slate-300 bg-slate-100 text-muted-foreground';
+    return 'border-border bg-muted text-muted-foreground';
   }
   const dueTime = Date.parse(dueDateRaw);
   if (Number.isNaN(dueTime)) {
-    return 'border-slate-300 bg-slate-100 text-muted-foreground';
+    return 'border-border bg-muted text-muted-foreground';
   }
   const now = Date.now();
   if (dueTime < now) {
     return 'border-destructive/50 bg-destructive/10 text-destructive';
   }
   if (dueTime <= now + 48 * 60 * 60 * 1000) {
-    return 'border-amber-400 bg-amber-50 text-amber-700';
+    return 'border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300';
   }
-  return 'border-sky-200 bg-sky-50 text-sky-700';
+  return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300';
 }
 
 function getOwnerName(document: DocumentEntry, fallbackRole: string): string {
@@ -957,7 +957,7 @@ function QueueRow({
       <Card
         onClick={() => onSelect(document.document_id)}
         className={cn(
-          'flex cursor-pointer flex-col gap-3 border border-border/60 bg-white px-4 py-4 shadow-sm transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20',
+          'flex cursor-pointer flex-col gap-3 border border-border/60 bg-card px-4 py-4 shadow-sm transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20',
           isSelected && 'border-primary/40 ring-2 ring-primary/20',
         )}
         tabIndex={0}
@@ -1008,7 +1008,7 @@ function QueueRow({
           </Button>
           <Button asChild variant="default" size="sm" disabled={isComplete}>
             <Link
-              to={`/pipeline?document=${document.document_id}`}
+              to={`/app/pipeline?document=${document.document_id}`}
               className="inline-flex items-center gap-1 text-primary-foreground hover:text-primary-foreground"
             >
               Open
@@ -1079,7 +1079,7 @@ function QueueRow({
         </Button>
         <Button asChild variant="default" size="sm" disabled={isComplete}>
           <Link
-            to={`/pipeline?document=${document.document_id}`}
+            to={`/app/pipeline?document=${document.document_id}`}
             className="inline-flex items-center gap-1 text-primary-foreground hover:text-primary-foreground"
           >
             Open
@@ -1093,7 +1093,7 @@ function QueueRow({
 
 function QueueTableHeader() {
   return (
-    <div className="hidden border-b border-border/60 bg-white px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:grid sm:grid-cols-[minmax(0,2.4fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] sm:items-center">
+    <div className="hidden border-b border-border/60 bg-surface-subtle px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:grid sm:grid-cols-[minmax(0,2.4fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] sm:items-center">
       <span className="text-left">Name</span>
       <span className="text-left">SLA</span>
       <span className="text-left">Owner</span>
@@ -1107,7 +1107,7 @@ function CountBubble({ count, highlight }: { count: number; highlight?: boolean 
     <span
       className={cn(
         'ml-2 inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full px-1 text-[11px] font-semibold transition-colors',
-        highlight ? 'bg-white/90 text-primary' : 'bg-lapis-500/10 text-lapis-500',
+        highlight ? 'bg-background/90 text-primary' : 'bg-primary/10 text-primary',
       )}
     >
       {count}

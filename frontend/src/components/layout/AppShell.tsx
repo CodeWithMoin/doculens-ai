@@ -1,16 +1,34 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, UsersRound, GitBranch, MessageSquare, Settings, Search, Plus, Loader2 } from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import {
+  Activity,
+  ChevronsUpDown,
+  Command,
+  FileStack,
+  FolderKanban,
+  LayoutDashboard,
+  Loader2,
+  Menu,
+  MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Search,
+  Settings,
+  Sparkles,
+  X,
+} from 'lucide-react';
 
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
+import { fetchDocuments } from '../../api/client';
+import type { DocumentEntry } from '../../api/types';
 import { cn } from '../../lib/utils';
-import { Badge } from '../ui/badge';
+import { useUIStore } from '../../stores/uiStore';
+import { Logo } from '../brand/Logo';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { NotificationToaster } from '../notifications/NotificationToaster';
 import { ProfileMenu } from '../profile/ProfileMenu';
-import { fetchDocuments } from '../../api/client';
-import type { DocumentEntry } from '../../api/types';
+import { Button } from '../ui/button';
+import { ThemeToggle } from '../ui/theme-toggle';
 
 interface AppShellProps {
   headerAction?: ReactNode;
@@ -20,249 +38,196 @@ interface AppShellProps {
   onLaunchUpload?: () => void;
 }
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Intake', icon: LayoutDashboard },
-  { to: '/work-queues', label: 'Work Queues', icon: UsersRound },
-  { to: '/pipeline', label: 'Pipeline', icon: GitBranch },
-  { to: '/qa', label: 'QA Studio', icon: MessageSquare },
-  { to: '/settings', label: 'Settings', icon: Settings },
+const PRIMARY_NAV = [
+  { to: '/app', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/app/qa', label: 'Ask DocuLens', icon: MessageSquareText },
+  { to: '/app/pipeline', label: 'Documents', icon: FileStack },
+  { to: '/app/work-queues', label: 'Work queues', icon: FolderKanban },
 ];
 
-const PLAYBOOK_STEPS = [
-  {
-    title: 'Intake',
-    description: 'Upload the paperwork, confirm detected fields, and tag urgency so processing kicks off instantly.',
-  },
-  {
-    title: 'Routing',
-    description: 'DocuLens routes items by type, risk, and region—manual overrides stay tracked for audit.',
-  },
-  {
-    title: 'Resolution',
-    description: 'Review the AI summary, add notes, and complete checklist items before exporting decisions.',
-  },
+const SECONDARY_NAV = [
+  { to: '/app/pipeline', label: 'Activity', icon: Activity },
+  { to: '/app/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AppShell({
-  headerAction,
-  children,
-  productName = 'DocuLens AI',
-  productTagline = 'Digitize every document. Route every task.',
-  onLaunchUpload,
-}: AppShellProps) {
+const PAGE_META: Record<string, { title: string; description: string }> = {
+  '/app': { title: 'Workspace', description: 'Your documents, decisions, and active work in one place.' },
+  '/app/qa': { title: 'Ask DocuLens', description: 'Explore your documents with answers grounded in source evidence.' },
+  '/app/pipeline': { title: 'Documents', description: 'Review summaries, classifications, source content, and processing status.' },
+  '/app/work-queues': { title: 'Work queues', description: 'Route documents to the right team and keep decisions moving.' },
+  '/app/settings': { title: 'Workspace settings', description: 'Configure models, retrieval, access, and preferences.' },
+};
+
+export function AppShell({ headerAction, children, onLaunchUpload }: AppShellProps) {
+  const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { isSidebarOpen, isSidebarCollapsed, toggleSidebar, toggleSidebarCollapsed } = useUIStore();
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [searchValue, setSearchValue] = useState('');
-  const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchResults, setSearchResults] = useState<DocumentEntry[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const page = PAGE_META[pathname] ?? PAGE_META['/app'];
 
   useEffect(() => {
-    const trimmed = searchValue.trim().toLowerCase();
-    if (!trimmed) {
+    const handleKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsCommandOpen((open) => !open);
+      }
+      if (event.key === 'Escape') {
+        setIsCommandOpen(false);
+        toggleSidebar(false);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [toggleSidebar]);
+
+  useEffect(() => {
+    const query = searchValue.trim().toLowerCase();
+    if (!query) {
       setSearchResults([]);
       setSearchError(null);
-      setIsSearching(false);
       return;
     }
-
     let cancelled = false;
     setIsSearching(true);
-
-    const timer = setTimeout(async () => {
-      try {
-        const docs = await fetchDocuments(150);
-        if (cancelled) return;
-
-        const filtered = docs.filter((doc) => {
-          const status = (doc.status ?? '').toLowerCase();
-          if (status === 'deleted') {
-            return false;
-          }
-          const haystack = [
-            doc.filename,
-            doc.doc_type,
-            doc.summary?.summary,
-            doc.document_id,
-            doc.metadata ? JSON.stringify(doc.metadata) : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase();
-          return haystack.includes(trimmed);
-        });
-
-        if (cancelled) return;
-        setSearchResults(filtered.slice(0, 5));
-          setSearchError(filtered.length ? null : `No results for “${searchValue.trim()}”.`);
-        } catch (error) {
+    const timer = window.setTimeout(() => {
+      fetchDocuments(150)
+        .then((documents) => {
           if (cancelled) return;
-          const message = error instanceof Error ? error.message : 'Unable to search documents.';
-          setSearchError(message);
-        setSearchResults([]);
-      } finally {
-        if (!cancelled) {
-          setIsSearching(false);
-        }
-      }
-    }, 200);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+          const matches = documents.filter((document) => [document.filename, document.doc_type, document.summary?.summary, document.document_id].filter(Boolean).join(' ').toLowerCase().includes(query));
+          setSearchResults(matches.slice(0, 6));
+          setSearchError(matches.length ? null : `No documents match “${searchValue.trim()}”`);
+        })
+        .catch((error: unknown) => !cancelled && setSearchError(error instanceof Error ? error.message : 'Search is unavailable.'))
+        .finally(() => !cancelled && setIsSearching(false));
+    }, 160);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [searchValue]);
 
-  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (searchValue.trim()) {
-      setIsSearchActive(true);
-    }
+  const selectDocument = (id: string) => {
+    navigate(`/app/pipeline?document=${id}`);
+    setIsCommandOpen(false);
+    setSearchValue('');
   };
 
-  const handleResultSelect = (documentId: string) => {
-    navigate(`/pipeline?document=${documentId}`);
+  const openDestination = (path: string) => {
+    navigate(path);
+    setIsCommandOpen(false);
     setSearchValue('');
-    setSearchResults([]);
-    setSearchError(null);
-    setIsSearchActive(false);
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="hidden w-72 flex-shrink-0 border-r border-platinum-600 bg-platinum-900 px-6 py-8 shadow-[16px_0_48px_rgba(47,102,144,0.08)] md:sticky md:top-0 md:flex md:h-screen md:flex-col md:overflow-y-auto">
-        <div className="flex h-full flex-col gap-6">
-          <div className="space-y-3">
-            <Badge className="w-fit border-lapis-500/40 bg-lapis-500/10 text-xs font-semibold uppercase tracking-[0.25em] text-lapis-500">
-              {productName}
-            </Badge>
-            <h1 className="text-xl font-semibold text-foreground">{productTagline}</h1>
-          </div>
-
-          <Button type="button" className="gap-2 bg-lapis-500 text-white hover:bg-lapis-400" onClick={() => onLaunchUpload?.()}>
-            <Plus className="h-4 w-4" />
-            New upload
+    <div className="min-h-screen bg-background text-foreground">
+      {isSidebarOpen ? <button className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden" onClick={() => toggleSidebar(false)} aria-label="Close navigation" /> : null}
+      <aside className={cn('fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-border/70 bg-surface-subtle/80 px-3 py-3 backdrop-blur-xl transition-[width,transform] duration-300 lg:translate-x-0', isSidebarOpen ? 'translate-x-0' : '-translate-x-full', isSidebarCollapsed ? 'lg:w-[72px]' : 'lg:w-[248px]')}>
+        <div className={cn('flex h-11 items-center justify-between px-2', isSidebarCollapsed && 'lg:justify-center lg:px-0')}>
+          <Logo className={cn(isSidebarCollapsed && 'lg:hidden')} />
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg lg:hidden" onClick={() => toggleSidebar(false)}><X className="h-4 w-4" /></Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden h-8 w-8 shrink-0 rounded-lg text-muted-foreground lg:inline-flex"
+            onClick={() => toggleSidebarCollapsed()}
+            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </Button>
+        </div>
+        <button title="Acme workspace" className={cn('mt-3 flex w-full items-center gap-3 rounded-xl border border-border/70 bg-background px-3 py-2.5 text-left shadow-sm transition hover:border-muted-foreground/30', isSidebarCollapsed && 'lg:justify-center lg:px-2')}>
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-foreground text-[10px] font-semibold text-background">AC</span>
+          <span className={cn('min-w-0 flex-1', isSidebarCollapsed && 'lg:hidden')}><span className="block truncate text-xs font-semibold">Acme workspace</span><span className="block text-[10px] text-muted-foreground">Production</span></span>
+          <ChevronsUpDown className={cn('h-3.5 w-3.5 text-muted-foreground', isSidebarCollapsed && 'lg:hidden')} />
+        </button>
+        {onLaunchUpload ? <Button onClick={onLaunchUpload} title="Add documents" className={cn('mt-3 w-full justify-start gap-2 rounded-xl', isSidebarCollapsed && 'lg:justify-center lg:px-0')}><Plus className="h-4 w-4" /><span className={cn(isSidebarCollapsed && 'lg:hidden')}>Add documents</span></Button> : <div className={cn('mt-3 flex items-center gap-2 rounded-xl border border-border/70 bg-background px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground', isSidebarCollapsed && 'lg:justify-center lg:px-0')}><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /><span className={cn(isSidebarCollapsed && 'lg:hidden')}>Public showcase</span></div>}
 
-          <nav className="flex flex-col gap-1.5">
-            {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-              <NavLink key={to} to={to} className={({ isActive }) => sidebarLinkClass(isActive)}>
-                <Icon className="h-4 w-4" />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </nav>
+        <nav className="mt-6 space-y-1" aria-label="Workspace navigation">
+          {PRIMARY_NAV.map((item) => <SidebarLink key={item.label} {...item} collapsed={isSidebarCollapsed} onClick={() => toggleSidebar(false)} />)}
+        </nav>
 
-          <div className="mt-auto text-xs text-muted-foreground" />
+        <div className={cn('mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60', isSidebarCollapsed && 'lg:hidden')}>Collections</div>
+        <nav className="mt-2 space-y-0.5">
+          {['Board materials', 'Customer research', 'Compliance'].map((label, index) => (
+            <button key={label} title={label} className={cn('flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground transition hover:bg-background hover:text-foreground', isSidebarCollapsed && 'lg:justify-center lg:px-2')}>
+              <span className={cn('h-2 w-2 rounded-[3px]', index === 0 ? 'bg-blue-500' : index === 1 ? 'bg-emerald-500' : 'bg-amber-400')} /><span className={cn(isSidebarCollapsed && 'lg:hidden')}>{label}</span>
+            </button>
+          ))}
+        </nav>
 
-          <div className="mt-auto rounded-2xl border border-dotted border-lapis-500/50 bg-lapis-500/5 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-lapis-600">Digitisation playbook</p>
-            <ol className="mt-4 space-y-3 text-xs text-muted-foreground">
-              {PLAYBOOK_STEPS.map(({ title, description }, index) => (
-                <li key={title} className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-lapis-500/40 bg-white text-xs font-semibold text-lapis-600 shadow-sm">
-                    {index + 1}
-                  </span>
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">{title}</p>
-                    <p>{description}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
+        <div className="mt-auto space-y-1 border-t border-border/70 pt-3">
+          {SECONDARY_NAV.map((item) => <SidebarLink key={item.label} {...item} collapsed={isSidebarCollapsed} onClick={() => toggleSidebar(false)} />)}
+          <div className={cn('mt-3 rounded-xl border border-border/70 bg-background p-3', isSidebarCollapsed && 'lg:hidden')}>
+            <div className="flex items-center justify-between text-[10px]"><span className="font-semibold">Vector storage</span><span className="text-muted-foreground">62%</span></div>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-[62%] rounded-full bg-primary" /></div>
+            <p className="mt-2 text-[10px] leading-4 text-muted-foreground">12.4k of 20k chunks indexed</p>
           </div>
         </div>
       </aside>
 
-      <div className="flex flex-1 min-h-0 flex-col">
-        <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-          <div className="flex flex-col gap-3 px-4 py-4 sm:px-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-1 items-center gap-3">
-                <form className="relative flex-1" onSubmit={handleSearchSubmit} role="search">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    value={searchValue}
-                    onChange={(event) => setSearchValue(event.target.value)}
-                    onFocus={() => setIsSearchActive(true)}
-                    onBlur={() => setTimeout(() => setIsSearchActive(false), 150)}
-                    placeholder="Search documents, teams, or tags…"
-                    aria-label="Search workspace"
-                    className="h-10 rounded-full border border-platinum-600 bg-white pl-10 pr-4 shadow"
-                  />
-                  {(isSearchActive && searchValue.trim()) || (searchError && searchValue.trim()) ? (
-                    <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-border/70 bg-white shadow-xl">
-                      {isSearching ? (
-                        <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Searching…
-                        </div>
-                      ) : searchResults.length ? (
-                        <ul className="divide-y divide-border/60">
-                          {searchResults.map((doc) => (
-                            <li key={doc.document_id}>
-                              <button
-                                type="button"
-                                onMouseDown={(event) => {
-                                  event.preventDefault();
-                                  handleResultSelect(doc.document_id);
-                                }}
-                                className="flex w-full flex-col items-start gap-1 px-4 py-3 text-left hover:bg-muted"
-                              >
-                                <span className="text-sm font-medium text-foreground">{doc.filename ?? doc.document_id}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {doc.doc_type ?? 'Unassigned'} · {new Date(doc.uploaded_at).toLocaleDateString()}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="px-4 py-3 text-sm text-muted-foreground">
-                          {searchError ?? `No results for “${searchValue.trim()}”.`}
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </form>
-              </div>
-              <div className="flex items-center gap-3">
-                <NotificationBell />
-                {headerAction}
-                <ProfileMenu />
-              </div>
-            </div>
-            <nav className="flex flex-wrap gap-2 md:hidden">
-              {NAV_ITEMS.map(({ to, label }) => (
-                <NavLink key={to} to={to} className={({ isActive }) => navLinkPillClass(isActive)}>
-                  {label}
-                </NavLink>
-              ))}
-            </nav>
+      <div className={cn('transition-[padding] duration-300', isSidebarCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[248px]')}>
+        <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-xl">
+          <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+            <Button variant="ghost" size="icon" className="rounded-lg lg:hidden" onClick={() => toggleSidebar(true)}><Menu className="h-4 w-4" /></Button>
+            <button onClick={() => setIsCommandOpen(true)} className="flex h-9 min-w-0 max-w-md flex-1 items-center gap-2 rounded-xl border border-border/70 bg-surface-subtle px-3 text-xs text-muted-foreground shadow-sm transition hover:border-muted-foreground/30 hover:bg-background">
+              <Search className="h-3.5 w-3.5" /><span className="truncate">Search documents…</span><span className="ml-auto hidden items-center gap-0.5 rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[9px] sm:flex"><Command className="h-2.5 w-2.5" />K</span>
+            </button>
+            <div className="ml-auto flex items-center gap-1"><ThemeToggle /><NotificationBell />{headerAction}<ProfileMenu /></div>
           </div>
         </header>
 
-        <main className="flex flex-1 min-h-0 flex-col gap-8 px-6 pb-12 pt-8 lg:px-10">{children}</main>
+        <main className="min-h-[calc(100vh-4rem)] px-4 pb-12 pt-7 sm:px-6 lg:px-8 lg:pt-9">
+          <div className="mx-auto max-w-[1440px]">
+            <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+              <div><h1 className="text-2xl font-semibold tracking-[-0.035em] md:text-[28px]">{page.title}</h1><p className="mt-1.5 text-sm text-muted-foreground">{page.description}</p></div>
+              <span className="hidden items-center gap-1.5 rounded-full border border-border bg-surface-subtle px-3 py-1.5 text-[10px] font-medium text-muted-foreground sm:inline-flex"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> All systems operational</span>
+            </div>
+            {children}
+          </div>
+        </main>
       </div>
 
+      {isCommandOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-start justify-center bg-slate-950/35 px-4 pt-[14vh] backdrop-blur-[6px]" role="dialog" aria-modal="true" aria-label="Search workspace" onMouseDown={() => setIsCommandOpen(false)}>
+          <div className="w-full max-w-[540px] overflow-hidden rounded-[20px] border border-border/90 bg-card shadow-[0_28px_90px_rgba(10,15,25,0.28)] dark:shadow-[0_32px_100px_rgba(0,0,0,0.5)]" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="border-b border-border/70 p-3">
+              <form onSubmit={(event: FormEvent) => event.preventDefault()} className="flex h-12 items-center gap-3 rounded-xl border border-border/80 bg-surface-subtle px-3 shadow-sm transition focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10">
+                <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <input autoFocus value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Search documents and summaries…" className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-sm text-foreground shadow-none outline-none placeholder:text-muted-foreground focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0" />
+                <button type="button" onClick={() => setIsCommandOpen(false)} aria-label="Close search" className="shrink-0 rounded-md border border-border bg-background/70 px-1.5 py-1 font-mono text-[9px] text-muted-foreground transition hover:text-foreground">ESC</button>
+              </form>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-2">
+              {!searchValue.trim() ? <CommandEmpty onNavigate={openDestination} /> : isSearching ? <div className="flex items-center gap-2 px-3 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Searching your workspace…</div> : searchResults.length ? searchResults.map((document) => <button key={document.document_id} onClick={() => selectDocument(document.document_id)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-subtle"><span className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-background"><FileStack className="h-3.5 w-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{document.filename ?? document.document_id}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{document.doc_type ?? 'Unclassified'} · {document.status ?? 'Processing'}</span></span><ChevronHint /></button>) : <p className="px-3 py-8 text-center text-sm text-muted-foreground">{searchError}</p>}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <NotificationToaster />
     </div>
   );
 }
 
-function navLinkPillClass(isActive: boolean) {
-  return cn(
-    'rounded-full border px-3 py-1 text-sm transition-colors',
-    isActive ? 'border-border bg-card text-foreground' : 'border-transparent text-muted-foreground hover:border-border hover:bg-card',
-  );
+function SidebarLink({ to, label, icon: Icon, end, collapsed, onClick }: { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; collapsed: boolean; onClick: () => void }) {
+  return <NavLink to={to} end={end} onClick={onClick} title={label} className={({ isActive }) => cn('group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-all', collapsed && 'lg:justify-center lg:px-2', isActive ? 'bg-background text-foreground shadow-sm ring-1 ring-border/70' : 'text-muted-foreground hover:bg-background/70 hover:text-foreground')}><Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} /><span className={cn(collapsed && 'lg:hidden')}>{label}</span></NavLink>;
 }
-
-function sidebarLinkClass(isActive: boolean) {
-  return cn(
-    'group flex items-center gap-3 rounded-xl px-4 py-2 text-sm font-medium transition-all',
-    isActive
-      ? 'bg-gradient-to-r from-lapis-500/15 via-lapis-500/10 to-transparent text-lapis-600 shadow-[0_12px_32px_rgba(47,102,144,0.18)] ring-1 ring-inset ring-lapis-500/40 backdrop-blur-sm'
-      : 'text-muted-foreground hover:bg-lapis-500/5 hover:text-foreground',
+function ChevronHint() { return <span className="font-mono text-[9px] text-muted-foreground">↵</span>; }
+function CommandEmpty({ onNavigate }: { onNavigate: (path: string) => void }) {
+  return (
+    <div className="p-2">
+      <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/60">Quick actions</p>
+      <button type="button" onClick={() => onNavigate('/app/qa')} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-subtle">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary"><Sparkles className="h-4 w-4" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-xs font-semibold">Ask DocuLens</span><span className="block text-[10px] text-muted-foreground">Ask a cited question about your workspace</span></span>
+        <ChevronHint />
+      </button>
+      <button type="button" onClick={() => onNavigate('/app/pipeline')} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-subtle">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600"><FileStack className="h-4 w-4" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-xs font-semibold">Browse documents</span><span className="block text-[10px] text-muted-foreground">Review summaries, sources, and status</span></span>
+        <ChevronHint />
+      </button>
+    </div>
   );
 }
