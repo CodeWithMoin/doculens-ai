@@ -133,7 +133,7 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card className="border-border/70 bg-card/80 shadow-subtle">
+      <Card className={isShowcaseReadOnly ? 'hidden' : 'border-border/70 bg-card/80 shadow-subtle'}>
         <CardHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-primary" />
@@ -391,7 +391,7 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      <Card className="border-border/70 bg-card/80 shadow-subtle">
+      <Card className={isShowcaseReadOnly ? 'hidden' : 'border-border/70 bg-card/80 shadow-subtle'}>
         <CardHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-primary" />
@@ -417,16 +417,23 @@ export function SettingsPage() {
         <CardHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg font-semibold">Server snapshot</CardTitle>
+            <CardTitle className="text-lg font-semibold">{isShowcaseReadOnly ? 'Showcase runtime' : 'Server snapshot'}</CardTitle>
           </div>
-          <CardDescription>Current values surfaced by the backend configuration endpoint.</CardDescription>
+          <CardDescription>
+            {isShowcaseReadOnly
+              ? 'A transparent view of the safe, zero-backend portfolio build.'
+              : 'Current values surfaced by the backend configuration endpoint.'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {serverConfig ? (
             <dl className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
               <SnapshotItem label="App name" value={serverConfig.app_name} />
+              {isShowcaseReadOnly ? (
+                <SnapshotItem label="Data source" value={serverConfig.showcase_data_source === 'synthetic' ? 'Bundled synthetic workspace' : 'Live API'} />
+              ) : null}
               <SnapshotItem label="Auth required" value={serverConfig.auth_required ? 'Yes' : 'No'} />
-              <SnapshotItem label="API key header" value={serverConfig.api_key_header} />
+              {!isShowcaseReadOnly ? <SnapshotItem label="API key header" value={serverConfig.api_key_header} /> : null}
               <SnapshotItem label="Chunk preview limit" value={String(serverConfig.chunk_preview_limit)} />
               <SnapshotItem label="Summary chunk limit" value={String(serverConfig.summary_chunk_limit)} />
               <SnapshotItem label="QA top_k" value={String(serverConfig.qa_top_k)} />

@@ -20,6 +20,20 @@ import type {
   UploadResponse,
   UserProfile,
 } from './types';
+import {
+  IS_STATIC_SHOWCASE,
+  STATIC_AUTH_RESPONSE,
+  STATIC_CHUNKS,
+  STATIC_CLASSIFICATION_HISTORY,
+  STATIC_DASHBOARD_INSIGHTS,
+  STATIC_DOCUMENTS,
+  STATIC_EVENTS,
+  STATIC_LABELS,
+  STATIC_QA_HISTORY,
+  STATIC_RUNTIME_CONFIG,
+  STATIC_SEARCH_HISTORY,
+  STATIC_USER,
+} from '../demo/staticShowcase';
 
 type QueryParams = Record<string, string | number | boolean | undefined>;
 
@@ -105,7 +119,15 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
+function rejectStaticShowcaseMutation(): never {
+  const error: ApiError = new Error('This action is disabled in the read-only showcase.');
+  error.status = 403;
+  error.payload = { detail: error.message };
+  throw error;
+}
+
 export async function fetchDocuments(limit = 20): Promise<DocumentEntry[]> {
+  if (IS_STATIC_SHOWCASE) return STATIC_DOCUMENTS.slice(0, limit);
   const response = await fetch(resolveUrl('/events/documents', { limit }), {
     headers: buildHeaders(),
   });
@@ -113,6 +135,7 @@ export async function fetchDocuments(limit = 20): Promise<DocumentEntry[]> {
 }
 
 export async function fetchEvents(limit = 20): Promise<EventEntry[]> {
+  if (IS_STATIC_SHOWCASE) return STATIC_EVENTS.slice(0, limit);
   const response = await fetch(resolveUrl('/events', { limit }), {
     headers: buildHeaders(),
   });
@@ -120,6 +143,7 @@ export async function fetchEvents(limit = 20): Promise<EventEntry[]> {
 }
 
 export async function archiveDocument(documentId: string, reason?: string): Promise<DocumentLifecycleResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl(`/events/documents/${documentId}/archive`), {
     method: 'POST',
     headers: buildHeaders(undefined, true),
@@ -132,6 +156,7 @@ export async function deleteDocument(
   documentId: string,
   options?: { reason?: string; purgeVectors?: boolean },
 ): Promise<DocumentLifecycleResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(
     resolveUrl(`/events/documents/${documentId}`, {
       reason: options?.reason,
@@ -146,6 +171,7 @@ export async function deleteDocument(
 }
 
 export async function restoreDocument(documentId: string, reason?: string): Promise<DocumentLifecycleResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl(`/events/documents/${documentId}/restore`), {
     method: 'POST',
     headers: buildHeaders(undefined, true),
@@ -158,6 +184,7 @@ export async function fetchDocumentChunks(
   documentId: string,
   limit: number,
 ): Promise<ChunkRecord[]> {
+  if (IS_STATIC_SHOWCASE) return (STATIC_CHUNKS[documentId] ?? []).slice(0, limit);
   const response = await fetch(
     resolveUrl(`/events/documents/${documentId}/chunks`, { limit }),
     {
@@ -168,6 +195,7 @@ export async function fetchDocumentChunks(
 }
 
 export async function fetchQaHistory(limit = 20): Promise<QAHistoryEntry[]> {
+  if (IS_STATIC_SHOWCASE) return STATIC_QA_HISTORY.slice(0, limit);
   const response = await fetch(resolveUrl('/events/qa/history', { limit }), {
     headers: buildHeaders(),
   });
@@ -175,6 +203,7 @@ export async function fetchQaHistory(limit = 20): Promise<QAHistoryEntry[]> {
 }
 
 export async function fetchSearchHistory(limit = 20): Promise<SearchHistoryEntry[]> {
+  if (IS_STATIC_SHOWCASE) return STATIC_SEARCH_HISTORY.slice(0, limit);
   const response = await fetch(resolveUrl('/events/search/history', { limit }), {
     headers: buildHeaders(),
   });
@@ -182,6 +211,7 @@ export async function fetchSearchHistory(limit = 20): Promise<SearchHistoryEntry
 }
 
 export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
+  if (IS_STATIC_SHOWCASE) return STATIC_RUNTIME_CONFIG;
   const response = await fetch(resolveUrl('/events/config'), {
     headers: buildHeaders(),
   });
@@ -189,6 +219,7 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
 }
 
 export async function fetchDashboardInsights(): Promise<DashboardInsights> {
+  if (IS_STATIC_SHOWCASE) return STATIC_DASHBOARD_INSIGHTS;
   const response = await fetch(resolveUrl('/events/insights/dashboard'), {
     headers: buildHeaders(),
   });
@@ -196,6 +227,7 @@ export async function fetchDashboardInsights(): Promise<DashboardInsights> {
 }
 
 export async function postEvent(payload: Record<string, unknown>): Promise<EventResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl('/events'), {
     method: 'POST',
     headers: buildHeaders(undefined, true),
@@ -209,6 +241,7 @@ export async function uploadDocument(options: {
   docType?: string;
   metadata?: Record<string, unknown>;
 }): Promise<UploadResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const form = new FormData();
   form.append('file', options.file);
   if (options.docType) {
@@ -227,6 +260,7 @@ export async function uploadDocument(options: {
 }
 
 export async function login(credentials: { email: string; password: string }): Promise<AuthResponse> {
+  if (IS_STATIC_SHOWCASE) return STATIC_AUTH_RESPONSE;
   const response = await fetch(resolveUrl('/auth/login'), {
     method: 'POST',
     headers: buildHeaders(undefined, true),
@@ -236,6 +270,7 @@ export async function login(credentials: { email: string; password: string }): P
 }
 
 export async function fetchProfile(): Promise<UserProfile> {
+  if (IS_STATIC_SHOWCASE) return STATIC_USER;
   const response = await fetch(resolveUrl('/auth/me'), {
     headers: buildHeaders(),
   });
@@ -246,6 +281,7 @@ export async function classifyDocument(
   documentId: string,
   payload: DocumentClassificationRequest = {},
 ): Promise<DocumentClassificationResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl(`/events/documents/${documentId}/classify`), {
     method: 'POST',
     headers: buildHeaders(undefined, true),
@@ -255,6 +291,7 @@ export async function classifyDocument(
 }
 
 export async function fetchLabels(): Promise<LabelsResponse> {
+  if (IS_STATIC_SHOWCASE) return STATIC_LABELS;
   const response = await fetch(resolveUrl('/events/labels'), {
     headers: buildHeaders(),
   });
@@ -262,6 +299,7 @@ export async function fetchLabels(): Promise<LabelsResponse> {
 }
 
 export async function createLabel(payload: LabelRequestPayload): Promise<LabelResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl('/events/labels'), {
     method: 'POST',
     headers: buildHeaders(undefined, true),
@@ -271,6 +309,7 @@ export async function createLabel(payload: LabelRequestPayload): Promise<LabelRe
 }
 
 export async function updateLabel(labelId: string, payload: Partial<LabelRequestPayload>): Promise<LabelResponse> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl(`/events/labels/${labelId}`), {
     method: 'PATCH',
     headers: buildHeaders(undefined, true),
@@ -280,6 +319,7 @@ export async function updateLabel(labelId: string, payload: Partial<LabelRequest
 }
 
 export async function deleteLabel(labelId: string, force = false): Promise<void> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl(`/events/labels/${labelId}`, { force }), {
     method: 'DELETE',
     headers: buildHeaders(),
@@ -288,6 +328,7 @@ export async function deleteLabel(labelId: string, force = false): Promise<void>
 }
 
 export async function fetchClassificationHistory(documentId: string): Promise<ClassificationHistoryEntry[]> {
+  if (IS_STATIC_SHOWCASE) return STATIC_CLASSIFICATION_HISTORY[documentId] ?? [];
   const response = await fetch(resolveUrl(`/events/documents/${documentId}/classification-history`), {
     headers: buildHeaders(),
   });
@@ -298,6 +339,7 @@ export async function overrideClassification(
   documentId: string,
   payload: ClassificationOverrideRequest,
 ): Promise<ClassificationHistoryEntry> {
+  if (IS_STATIC_SHOWCASE) rejectStaticShowcaseMutation();
   const response = await fetch(resolveUrl(`/events/documents/${documentId}/classification-history`), {
     method: 'POST',
     headers: buildHeaders(undefined, true),

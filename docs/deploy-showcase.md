@@ -1,5 +1,7 @@
 # Deploy the portfolio showcase
 
+> **Optional full-stack profile:** most portfolio links should use the [zero-cost static showcase](deploy-static-showcase.md). Use this database-backed profile only when a reviewer specifically needs to exercise the HTTP read API.
+
 This deployment is intentionally a **read-only product tour**, not a public SaaS trial. Visitors can inspect the synthetic workspace, navigate documents, use global search, and review grounded answers with citations. Uploads, live model calls, classification changes, and destructive actions are removed in the UI and rejected by the API.
 
 ## Recommended shape

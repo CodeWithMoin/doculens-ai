@@ -211,6 +211,7 @@ export interface RuntimeConfig {
   chunk_preview_limit: number;
   auth_required: boolean;
   showcase_read_only: boolean;
+  showcase_data_source?: 'live' | 'synthetic';
   api_key_header: string;
   persona_options?: string[];
   role_definitions?: Record<string, RoleDefinition>;

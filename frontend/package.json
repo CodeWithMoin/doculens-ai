@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:showcase": "tsc -b && VITE_STATIC_SHOWCASE=true vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

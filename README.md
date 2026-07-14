@@ -111,17 +111,19 @@ Open:
 
 Schema migrations should be applied with Alembic for deployments. Automatic table initialization is a local-development convenience and can be disabled with `DOCULENS_INITIALIZE_DATABASE=false`. Demo users are opt-in via `DOCULENS_SEED_DEMO_USERS=true` and are explicitly rejected in production.
 
-### Publish the portfolio showcase
+### Publish the portfolio showcase for free
 
-DocuLens includes a separate single-node deployment for a public, read-only product tour. It serves the frontend and API from one HTTPS domain, seeds synthetic documents idempotently, skips the worker, and blocks every state-changing workspace request in the API.
+The recommended recruiter-facing deployment is a static Cloudflare Pages build. It bundles the synthetic workspace, opens without login, disables mutations, and requires no API server, database, model key, or always-on compute.
 
 ```bash
-cp .env.showcase.example .env.showcase
-# Set the domain and generated secrets, then:
-make showcase-up
+cd frontend
+npm ci
+npm run build:showcase
 ```
 
-See the [showcase deployment runbook](docs/deploy-showcase.md) for DNS, TLS, verification, backups, and rollback. This mode demonstrates the finished AI workflow without accepting public uploads or spending money on visitor model calls.
+Follow the [zero-cost static deployment guide](docs/deploy-static-showcase.md) to publish it. Direct links such as `/app/qa` work through the included SPA routing rule, and the UI explicitly identifies the workspace as **read-only synthetic data**.
+
+The repository also retains an [optional full-stack showcase runbook](docs/deploy-showcase.md) for database-backed API demonstrations. That path is intentionally not required for a typical recruiter or founder walkthrough.
 
 ## API examples
 
@@ -213,7 +215,8 @@ More detail is recorded in [`docs/engineering-notes.md`](docs/engineering-notes.
 
 - OCR/model accuracy depends on document quality, language, and provider.
 - The current retrieval path is dense-first; hybrid ranking exists but needs a labelled corpus before tuning.
-- The included deployment manifest is deliberately scoped to a single-node, read-only portfolio showcase—not a multi-tenant customer environment.
+- The public static showcase demonstrates precomputed synthetic outputs; it does not run live retrieval or model inference in a visitor's browser.
+- The optional deployment manifest is deliberately scoped to a single-node, read-only API showcase—not a multi-tenant customer environment.
 - Authentication is suitable for a single workspace; multi-tenant authorization is not implemented.
 - Retrieval metrics are utilities, not a bundled benchmark dataset—the project does not claim quality without domain-labelled examples.
 

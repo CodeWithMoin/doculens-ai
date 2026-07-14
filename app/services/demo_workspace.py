@@ -37,6 +37,17 @@ class DemoDocument:
     chunks: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class DemoQuestion:
+    slug: str
+    question: str
+    answer: str
+    reasoning: str
+    confidence: float
+    chunk_indexes: tuple[int, ...]
+    minutes_ago: int
+
+
 DEMO_DOCUMENTS: tuple[DemoDocument, ...] = (
     DemoDocument(
         slug="acme-msa",
@@ -168,6 +179,63 @@ DEMO_DOCUMENTS: tuple[DemoDocument, ...] = (
     ),
 )
 
+DEMO_QUESTIONS: tuple[DemoQuestion, ...] = (
+    DemoQuestion(
+        slug="vendor-risk",
+        question="What evidence is still required before Atlas Payments can be approved?",
+        answer="Obtain evidence that the quarterly contractor access reviews were completed by July 10. Until Compliance accepts that evidence, the residual vendor risk remains medium.",
+        reasoning="The open action requests contractor access-review evidence, and the risk section makes acceptance of that evidence the condition for closing the medium residual risk.",
+        confidence=0.94,
+        chunk_indexes=(3, 4),
+        minutes_ago=35,
+    ),
+    DemoQuestion(
+        slug="northstar-invoice",
+        question="How much is due, when is it due, and what explains the change?",
+        answer="Northstar owes $18,420 by July 21, 2026. GPU compute increased 24% month over month, while a $1,250 reserved-capacity credit reduced the final amount.",
+        reasoning="The usage section explains the GPU increase, and the payment section gives the applied credit and due date.",
+        confidence=0.97,
+        chunk_indexes=(2, 3),
+        minutes_ago=44,
+    ),
+    DemoQuestion(
+        slug="security-handbook",
+        question="What should an employee do after discovering a suspected security incident?",
+        answer="Report it to the security channel within 30 minutes of discovery. The rule covers suspected incidents, accidental disclosure, and lost devices.",
+        reasoning="The incident-reporting policy specifies both the reporting destination and the 30-minute deadline.",
+        confidence=0.98,
+        chunk_indexes=(2,),
+        minutes_ago=55,
+    ),
+    DemoQuestion(
+        slug="incident-runbook",
+        question="What are the first coordination and communication steps for a SEV-1?",
+        answer="Assign an incident commander, operations lead, and communications lead within 10 minutes. Publish the first customer update within 15 minutes, then update at least every 30 minutes until recovery.",
+        reasoning="The opening runbook steps define the response roles and the customer-communication cadence.",
+        confidence=0.95,
+        chunk_indexes=(1, 2),
+        minutes_ago=63,
+    ),
+    DemoQuestion(
+        slug="ai-governance",
+        question="What evidence should be retained to audit an AI-assisted document decision?",
+        answer="Retain the model, prompt, and index versions; the retrieved chunk identifiers; the reviewer action; and the final disposition.",
+        reasoning="The auditability section lists the technical versions, retrieved evidence, and human decision record that make a result reproducible.",
+        confidence=0.96,
+        chunk_indexes=(3,),
+        minutes_ago=70,
+    ),
+    DemoQuestion(
+        slug="acme-msa",
+        question="When do we need to give notice if we do not want the Acme agreement to renew?",
+        answer="Send written non-renewal notice no later than August 1, 2026. The agreement requires at least 60 days' notice before the September 30 term end.",
+        reasoning="The renewal clause states both the term end date and the 60-day notice requirement.",
+        confidence=0.96,
+        chunk_indexes=(1,),
+        minutes_ago=78,
+    ),
+)
+
 
 def _stable_uuid(*parts: object) -> UUID:
     return uuid5(NAMESPACE_URL, "/".join(("doculens", DEMO_SEED_VERSION, *(str(part) for part in parts))))
@@ -181,6 +249,10 @@ def seed_demo_workspace(session: Session, *, embedding_dimensions: int = 1536) -
     """Seed the synthetic workspace once and return whether rows were inserted."""
     marker_id = _stable_uuid("event", "upload", DEMO_DOCUMENTS[0].slug)
     if session.get(Event, marker_id) is not None:
+        # Content additions are backfilled independently so existing showcase
+        # databases gain new curated examples without duplicating documents.
+        _seed_qa_history(session, _utc_now_naive())
+        session.flush()
         return False
 
     now = _utc_now_naive()
@@ -234,7 +306,11 @@ def _seed_document(
 ) -> list[UUID]:
     document_id = f"demo-{document.slug}"
     uploaded_at = now - timedelta(hours=document.uploaded_hours_ago)
-    due_at = now + timedelta(hours=document.due_hours_from_now) if document.due_hours_from_now is not None else None
+    due_at = (
+        now + timedelta(hours=document.due_hours_from_now)
+        if document.due_hours_from_now is not None
+        else None
+    )
     # Timescale's time-partitioned vector table extracts timestamps from UUIDv1
     # keys, so vector records intentionally use uuid1 rather than stable ids.
     chunk_ids = [uuid1() for _ in document.chunks]
@@ -275,7 +351,9 @@ def _seed_document(
             task_context={
                 "event": upload_data,
                 "metadata": {"document": document_context},
-                "nodes": {"DocumentIngestionNode": {"status": "completed", "chunk_count": len(document.chunks)}},
+                "nodes": {
+                    "DocumentIngestionNode": {"status": "completed", "chunk_count": len(document.chunks)}
+                },
             },
             created_at=uploaded_at,
             updated_at=uploaded_at + timedelta(minutes=6),
@@ -348,36 +426,49 @@ def _seed_document(
 
 
 def _seed_qa_history(session: Session, now: datetime) -> None:
-    document = DEMO_DOCUMENTS[0]
-    document_id = f"demo-{document.slug}"
-    query = "When do we need to give notice if we do not want the Acme agreement to renew?"
-    created_at = now - timedelta(hours=1, minutes=18)
-    reference = {
-        "reference": f"{document.filename} · page 1 · chunk 1",
-        "document_id": document_id,
-        "filename": document.filename,
-        "chunk_index": 1,
-    }
-    session.add(
-        Event(
-            id=_stable_uuid("event", "qa", "acme-renewal"),
-            data={"event_type": "qa_query", "query": query, "filters": {"document_id": document_id}},
-            task_context={
-                "event": {"event_type": "qa_query", "query": query},
-                "metadata": {
-                    "qa": {
-                        "answer": "Send written non-renewal notice no later than August 1, 2026. The agreement requires at least 60 days' notice before the September 30 term end.",
-                        "reasoning": "The renewal clause states both the term end date and the 60-day notice requirement.",
-                        "confidence": 0.96,
-                        "citations": [reference["reference"]],
-                    }
+    documents = {document.slug: document for document in DEMO_DOCUMENTS}
+    for question in DEMO_QUESTIONS:
+        event_key = "acme-renewal" if question.slug == "acme-msa" else question.slug
+        event_id = _stable_uuid("event", "qa", event_key)
+        if session.get(Event, event_id) is not None:
+            continue
+
+        document = documents[question.slug]
+        document_id = f"demo-{document.slug}"
+        created_at = now - timedelta(minutes=question.minutes_ago)
+        references = [
+            {
+                "reference": f"{document.filename} · page {chunk_index} · chunk {chunk_index}",
+                "document_id": document_id,
+                "filename": document.filename,
+                "chunk_index": chunk_index,
+            }
+            for chunk_index in question.chunk_indexes
+        ]
+        session.add(
+            Event(
+                id=event_id,
+                data={
+                    "event_type": "qa_query",
+                    "query": question.question,
+                    "filters": {"document_id": document_id},
                 },
-                "nodes": {"QAQueryNode": {"chunk_references": [reference]}},
-            },
-            created_at=created_at,
-            updated_at=created_at + timedelta(seconds=3),
+                task_context={
+                    "event": {"event_type": "qa_query", "query": question.question},
+                    "metadata": {
+                        "qa": {
+                            "answer": question.answer,
+                            "reasoning": question.reasoning,
+                            "confidence": question.confidence,
+                            "citations": [reference["reference"] for reference in references],
+                        }
+                    },
+                    "nodes": {"QAQueryNode": {"chunk_references": references}},
+                },
+                created_at=created_at,
+                updated_at=created_at + timedelta(seconds=3),
+            )
         )
-    )
 
 
 def _seed_search_history(session: Session, now: datetime, chunk_ids_by_slug: dict[str, list[UUID]]) -> None:
